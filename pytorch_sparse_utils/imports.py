@@ -7,7 +7,9 @@ try:
 
     has_minkowskiengine = True
 except ImportError:
-    MinkowskiEngine = None
+    class DummyME:
+        SparseTensor = None
+    ME = DummyME()
     MinkowskiNonlinearityBase = None
     has_minkowskiengine = False
 try:
