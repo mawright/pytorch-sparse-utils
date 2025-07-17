@@ -1,5 +1,7 @@
 import functools
+
 import torch
+from packaging import version
 
 try:
     import MinkowskiEngine as ME
@@ -45,9 +47,6 @@ def requires_spconv(func):
 
 def check_pytorch_version(required_version: str) -> bool:
     try:
-        current_version = tuple(map(int, torch.__version__.split(".")))
-        required_version_tuple = tuple(map(int, required_version.split(".")))
-
-        return current_version >= required_version_tuple
-    except ValueError:
-        raise ValueError(f"Invalid version string: {required_version}")
+        return version.parse(torch.__version__) >= version.parse(required_version)
+    except ValueError as e:
+        raise ValueError(f"Invalid version string: {required_version}") from e
