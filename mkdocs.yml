@@ -1,0 +1,18 @@
+site_name: pytorch-sparse-utils
+theme:
+  name: readthedocs
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+
+nav:
+  - Home: index.md
+  - Readme: README.md
+  - Indexing: indexing.md
+  - Batching: batching.md
+  - MinkowskiEngine and spconv: me_sp.md

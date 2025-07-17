@@ -81,7 +81,7 @@ Due to incompatibilities with newer PyTorch versions, MinkowskiEngine and spconv
 
 ## See Also
 pytorch-sparse-utils represents a base set of tools for more complex neural-net operations on sparse tensors. For more sparse tensor applications, see the following repositories:
-- TODO fill in
+- TODO fill in once uploaded
 
 ## Future Plans
 - Custom C++/CUDA extensions for the most performance-critical operations
