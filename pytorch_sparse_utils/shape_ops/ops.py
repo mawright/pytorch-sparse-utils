@@ -1,7 +1,109 @@
+from typing import Optional
 import torch
 from torch import Tensor
 
-from .indexing.script_funcs import flatten_sparse_indices
+from ..indexing.script_funcs import (
+    flatten_sparse_indices,
+    unflatten_nd_indices,
+    flatten_nd_indices,
+)
+from .helpers import check_valid, do_infer_dim, verify_shape_numel
+
+
+@torch.jit.script
+def sparse_reshape(
+    tensor: Tensor,
+    new_sparse_shape: Optional[list[int]] = None,
+    new_dense_shape: Optional[list[int]] = None,
+) -> Tensor:
+    """General-purpose .reshape() equivalent for sparse tensors.
+
+    This function serves as an equivalent of the .reshape() operation, which does not
+    support sparse tensors.
+    Sparse tensors may be reshaped in one or both of their sparse or dense dimensions.
+    The intention is to be as close to feature compatibility to the built-in dense
+    Tensor.reshape() as possible. As such, features like inferred dimensions (by passing
+    -1 as one of the new dimensions), shape compatibility checking, etc., are supported.
+
+    Sparse and/or dense dimensions of a sparse tensor may be reshaped independently by
+    passing in the new shape(s). Reshaping the sparse dimension also updates the
+    .indices() of the nonzero values of the sparse tensor. If one of the
+
+    Args:
+        tensor (Tensor): Input sparse tensor to be reshaped.
+        new_sparse_shape (Optional[list[int]], optional): The new shape of the sparse
+            tensor's sparse dimensions. If None, the sparse dimensions are not reshaped.
+            Defaults to None.
+        new_dense_shape (Optional[list[int]], optional): The new shape of the sparse
+            tensor's dense dimensions. If None, the dense dimensions are not reshaped.
+            Defaults to None.
+
+    Raises:
+        ValueError: If the input tensor is not sparse, or if neither of new_sparse_shape
+            nor new_dense_shape are provided.
+        RuntimeError: If the new shapes are incompatible, with similar conditions to
+            vanilla dense reshape.
+
+    Returns:
+        Tensor: The reshaped tensor.
+    """
+    if not tensor.is_sparse:
+        raise ValueError("Received non-sparse tensor.")
+
+    if new_sparse_shape is None and new_dense_shape is None:
+        raise ValueError(
+            "Expected one or both of new_sparse_shape and new_dense_shape but got neither."
+        )
+
+    in_sparse_shape = list(tensor.shape[: tensor.sparse_dim()])
+    in_dense_shape = list(tensor.shape[tensor.sparse_dim() :])
+
+    # Input checks for new sparse shape
+    if new_sparse_shape is not None:
+        check_valid(new_sparse_shape, "sparse")
+        new_sparse_shape = list(new_sparse_shape)
+        new_sparse_shape = do_infer_dim(new_sparse_shape, in_sparse_shape, "sparse")
+        verify_shape_numel(new_sparse_shape, in_sparse_shape, "sparse")
+
+    # Input checks for new dense shape
+    if new_dense_shape is not None:
+        check_valid(new_dense_shape, "dense")
+        new_dense_shape = list(new_dense_shape)
+        new_dense_shape = do_infer_dim(new_dense_shape, in_dense_shape, "dense")
+        verify_shape_numel(new_dense_shape, in_dense_shape, "dense")
+
+    tensor = tensor.coalesce()  # no-op if already coalesced
+
+    # Compute new sparse indices
+    if new_sparse_shape is not None:
+        indices = tensor.indices()
+        flat_indices, _ = flatten_nd_indices(
+            indices, torch.tensor(in_sparse_shape, device=tensor.device)
+        )
+        new_indices = unflatten_nd_indices(
+            flat_indices, torch.tensor(new_sparse_shape, device=tensor.device)
+        )
+        new_shape = list(new_sparse_shape)
+    else:
+        new_indices = tensor.indices()
+        new_shape = list(in_sparse_shape)
+
+    # Reshape sparse values
+    if new_dense_shape is not None:
+        values = tensor.values()
+        nnz = values.size(0)
+        new_values = values.reshape([nnz] + list(new_dense_shape))
+        new_shape += list(new_dense_shape)
+    else:
+        new_values = tensor.values()
+        new_shape += list(in_dense_shape)
+
+    return torch.sparse_coo_tensor(
+        new_indices,
+        new_values,
+        new_shape,
+        is_coalesced=tensor.is_coalesced(),  # index order unchanged
+    ).coalesce()
 
 
 def sparse_squeeze(tensor: Tensor, dim: int) -> Tensor:

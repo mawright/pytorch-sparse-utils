@@ -21,10 +21,6 @@ def prod(x: Tensor) -> Tensor: ...
 def prod(x: list[int]) -> int: ...  # noqa: F811
 @_overload
 def prod(x: list[float]) -> float: ...  # noqa: F811
-@_overload
-def prod(x: tuple[int, ...]) -> int: ...  # noqa: F811
-@_overload
-def prod(x: tuple[float, ...]) -> float: ...  # noqa: F811
 
 
 def prod(x):  # noqa: F811
@@ -48,6 +44,15 @@ def prod(x):  # noqa: F811
             result *= element
         return result
     return math.prod(x)
+
+
+@torch.jit.script
+def list_where(in_list: list[bool]) -> list[int]:
+    indices: list[int] = []
+    for i, x in enumerate(in_list):
+        if x:
+            indices.append(i)
+    return indices
 
 
 @torch.jit.script
