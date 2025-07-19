@@ -1,36 +1,44 @@
+from .batch_ops import BatchTopK, batch_topk, lexsort_nd, unpack_batch_topk
 from .batch_utils import (
     batch_dim_to_leading_index,
+    batch_indices_to_offsets,
     batch_offsets_from_sparse_tensor_indices,
     batch_offsets_to_indices,
     batch_offsets_to_seq_lengths,
-    batched_sparse_tensor_to_sparse,
-    deconcat_add_batch_dim,
-    remove_batch_dim_and_concat,
+    padded_to_sparse_tensor,
+    concatenated_to_padded,
+    normalize_batch_offsets,
+    padded_to_concatenated,
     seq_lengths_to_batch_offsets,
     seq_lengths_to_indices,
-    sparse_tensor_to_batched,
-    split_batch_concatted_tensor,
-    normalize_batch_offsets,
-    batch_indices_to_offsets,
+    sparse_tensor_to_padded,
+    split_batch_concatenated_tensor,
+    sparse_tensor_to_concatenated,
+    concatenated_to_sparse_tensor,
 )
 
-from .batch_ops import batch_topk, BatchTopK
-
 __all__ = [
-    "batch_dim_to_leading_index",
-    "batch_offsets_from_sparse_tensor_indices",
-    "batch_offsets_to_indices",
+    # Format conversions
+    "concatenated_to_padded",
+    "padded_to_concatenated",
+    "sparse_tensor_to_concatenated",
+    "concatenated_to_sparse_tensor",
+    "sparse_tensor_to_padded",
+    "padded_to_sparse_tensor",
+    # Offset and index conversions
+    "normalize_batch_offsets",
     "batch_offsets_to_seq_lengths",
-    "batched_sparse_tensor_to_sparse",
-    "deconcat_add_batch_dim",
-    "remove_batch_dim_and_concat",
+    "batch_offsets_to_indices",
     "seq_lengths_to_batch_offsets",
     "seq_lengths_to_indices",
-    "sparse_tensor_to_batched",
-    "split_batch_concatted_tensor",
-    "normalize_batch_offsets",
     "batch_indices_to_offsets",
+    # Other utilities
+    "split_batch_concatenated_tensor",
+    "batch_dim_to_leading_index",
+    "batch_offsets_from_sparse_tensor_indices",
     # batch_ops
     "batch_topk",
     "BatchTopK",
+    "unpack_batch_topk",
+    "lexsort_nd",
 ]

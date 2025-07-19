@@ -6,7 +6,7 @@ from hypothesis import strategies as st
 from hypothesis import given, settings, assume, HealthCheck
 
 # Import the functions to test
-from pytorch_sparse_utils.indexing.script_funcs import (
+from pytorch_sparse_utils.indexing.utils import (
     flatten_sparse_indices,
     gather_mask_and_fill,
     get_sparse_index_mapping,

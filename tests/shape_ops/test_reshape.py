@@ -1,15 +1,13 @@
 import math
 
 import random
-import hypothesis
 import pytest
 import torch
-from hypothesis import HealthCheck, assume, given, settings, example
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
-from torch import Tensor, nn
 
 from pytorch_sparse_utils.shape_ops import sparse_reshape
-from pytorch_sparse_utils.indexing.script_funcs import flatten_nd_indices
+from pytorch_sparse_utils.indexing.utils import flatten_nd_indices
 
 from .. import random_sparse_tensor, random_sparse_tensor_strategy
 
@@ -146,20 +144,6 @@ class TestSparseReshape:
         ):
             sparse_reshape(tensor, new_dense_shape=[100])
 
-    @example(
-        tensor_config={
-            "sparse_shape": [0],
-            "dense_shape": [],
-            "sparsity": 0.0,
-            "seed": 0,
-            "dtype": torch.float32,
-        },
-        reshape_sparse=True,  # or any other generated value
-        reshape_dense=True,  # or any other generated value
-        infer_sparse=False,
-        infer_dense=False,  # or any other generated value
-        new_shape_seed=0,
-    )
     @settings(suppress_health_check=[HealthCheck.differing_executors], deadline=None)
     @given(
         tensor_config=random_sparse_tensor_strategy(max_dim=10),

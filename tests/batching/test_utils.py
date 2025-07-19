@@ -3,14 +3,14 @@ import torch
 from torch import Tensor
 
 from pytorch_sparse_utils.batching.batch_utils import (
-    split_batch_concatted_tensor,
+    split_batch_concatenated_tensor,
     normalize_batch_offsets,
     seq_lengths_to_batch_offsets,
     batch_offsets_to_seq_lengths,
     batch_offsets_to_indices,
     seq_lengths_to_indices,
-    deconcat_add_batch_dim,
-    remove_batch_dim_and_concat,
+    concatenated_to_padded,
+    padded_to_concatenated,
     batch_dim_to_leading_index,
     batch_offsets_from_sparse_tensor_indices,
 )
@@ -198,7 +198,7 @@ class TestSplitBatchConcattedTensor:
         self, simple_tensor: Tensor, simple_batch_offsets: Tensor, device
     ):
         """Test basic splitting functionality."""
-        result = split_batch_concatted_tensor(simple_tensor, simple_batch_offsets)
+        result = split_batch_concatenated_tensor(simple_tensor, simple_batch_offsets)
 
         # Expected splits: [1,2,3], [4,5,6,7], [8,9]
         assert len(result) == 3
@@ -222,7 +222,7 @@ class TestSplitBatchConcattedTensor:
         )
 
         batch_offsets = torch.tensor([0, 3, 5, 7], device=device)
-        result = split_batch_concatted_tensor(tensor, batch_offsets)
+        result = split_batch_concatenated_tensor(tensor, batch_offsets)
 
         assert len(result) == 3
         assert torch.equal(result[0], tensor[0:3])
@@ -241,7 +241,7 @@ class TestDeconcatAddBatchDim:
 
         batch_offsets = torch.tensor([0, 3, 6], device=device)
 
-        result, padding_mask = deconcat_add_batch_dim(tensor, batch_offsets)
+        result, padding_mask = concatenated_to_padded(tensor, batch_offsets)
 
         # Expected shape: [2, 3, 2] (2 batches, max_len=3, feature_dim=2)
         assert result.shape == (2, 3, 2)
@@ -262,7 +262,7 @@ class TestDeconcatAddBatchDim:
 
         batch_offsets = torch.tensor([0, 2, 5], device=device)
 
-        result, padding_mask = deconcat_add_batch_dim(tensor, batch_offsets)
+        result, padding_mask = concatenated_to_padded(tensor, batch_offsets)
 
         # Expected shape: [2, 3, 2] (2 batches, max_len=3, feature_dim=2)
         assert result.shape == (2, 3, 2)
@@ -287,7 +287,7 @@ class TestDeconcatAddBatchDim:
 
         batch_offsets = torch.tensor([0, 1, 4], device=device)
 
-        result, padding_mask = deconcat_add_batch_dim(
+        result, padding_mask = concatenated_to_padded(
             tensor, batch_offsets, pad_value=-1.0
         )
 
@@ -304,7 +304,7 @@ class TestDeconcatAddBatchDim:
             (ValueError, torch.jit.Error),  # type: ignore
             match="Expected tensor to have at least 2 dimensions",
         ):
-            deconcat_add_batch_dim(tensor_1d, batch_offsets)
+            concatenated_to_padded(tensor_1d, batch_offsets)
 
 
 @pytest.mark.cpu_and_cuda
@@ -324,7 +324,7 @@ class TestRemoveBatchDimAndConcat:
             [[False, False, False], [False, False, True]], device=device
         )
 
-        result, batch_offsets = remove_batch_dim_and_concat(tensor, padding_mask)
+        result, batch_offsets = padded_to_concatenated(tensor, padding_mask)
 
         # Expected shape: [5, 2] (total non-padded elements, feature dim)
         assert result.shape == (5, 2)
@@ -345,7 +345,7 @@ class TestRemoveBatchDimAndConcat:
             [[[1.0, 1.1], [2.0, 2.1]], [[3.0, 3.1], [4.0, 4.1]]], device=device
         )
 
-        result, batch_offsets = remove_batch_dim_and_concat(tensor)
+        result, batch_offsets = padded_to_concatenated(tensor)
 
         # All elements kept - shape [4, 2]
         assert result.shape == (4, 2)
@@ -376,7 +376,7 @@ class TestRemoveBatchDimAndConcat:
             device=device,
         )
 
-        result, batch_offsets = remove_batch_dim_and_concat(tensor, padding_mask)
+        result, batch_offsets = padded_to_concatenated(tensor, padding_mask)
 
         # Expected shape: [5, 2] (total non-padded elements, feature dim)
         assert result.shape == (5, 2)
@@ -399,7 +399,7 @@ class TestRemoveBatchDimAndConcat:
             (ValueError, torch.jit.Error),  # type: ignore
             match="Expected tensor to have at least 3 dimensions",
         ):
-            remove_batch_dim_and_concat(tensor_2d)
+            padded_to_concatenated(tensor_2d)
 
         # Test with mismatched padding mask dimensions
         tensor = torch.rand(3, 4, 2, device=device)
@@ -408,7 +408,7 @@ class TestRemoveBatchDimAndConcat:
         with pytest.raises(
             (ValueError, torch.jit.Error), match="Batch size mismatch"  # type: ignore
         ):
-            remove_batch_dim_and_concat(tensor, padding_mask_wrong_batch)
+            padded_to_concatenated(tensor, padding_mask_wrong_batch)
 
 
 @pytest.mark.cpu_and_cuda

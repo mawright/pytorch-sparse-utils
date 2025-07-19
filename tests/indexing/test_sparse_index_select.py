@@ -3,9 +3,9 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-from pytorch_sparse_utils.indexing.sparse_index_select import (
+from pytorch_sparse_utils.indexing.basics import _sparse_index_select_inner
+from pytorch_sparse_utils.indexing.basics import (
     sparse_index_select,
-    _sparse_index_select_inner,
 )
 
 

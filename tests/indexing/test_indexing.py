@@ -2,11 +2,11 @@ import pytest
 import torch
 from torch import Tensor, nn
 
-from pytorch_sparse_utils.indexing.indexing import (
+from pytorch_sparse_utils.indexing.basics import (
     sparse_select,
     batch_sparse_index,
-    union_sparse_indices,
 )
+from pytorch_sparse_utils.indexing.misc import union_sparse_indices
 
 
 @pytest.fixture
