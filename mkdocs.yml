@@ -1,6 +1,7 @@
 site_name: pytorch-sparse-utils
 theme:
   name: readthedocs
+repo_url: https://github.com/mawright/pytorch-sparse-utils
 
 plugins:
   - search
@@ -9,10 +10,10 @@ plugins:
         python:
           options:
             show_source: true
+          paths: [pytorch_sparse_utils]
 
 nav:
   - Home: index.md
-  - Readme: README.md
   - Indexing: indexing.md
   - Batching: batching.md
   - MinkowskiEngine and spconv: me_sp.md

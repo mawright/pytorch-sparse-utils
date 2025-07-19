@@ -21,6 +21,7 @@ tests = [
 ]
 minkowskiengine = ["minkowskiengine"]
 spconv = ["cumm", "spconv"]
+docs = ["mkdocs", "mkdocstrings", "mkdocstrings-python"]
 
 [tool.pytest.ini_options]
 env = [
