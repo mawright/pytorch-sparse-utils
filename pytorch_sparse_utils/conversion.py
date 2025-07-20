@@ -30,12 +30,14 @@ def torch_sparse_to_pydata_sparse(tensor: Tensor) -> sparse.COO:
 
 
 def pydata_sparse_to_torch_sparse(
-    sparse_array: sparse.COO, device: Optional[torch.device] = None
+    sparse_array: sparse.COO, device: Optional[Union[str, torch.device]] = None
 ) -> Tensor:
     """Converts a Pydata sparse COO array to an equivalent sparse torch.Tensor
 
     Args:
-        array (sparse.COO): Pydata sparse COO array to be converted
+        sparse_array (sparse.COO): Pydata sparse COO array to be converted
+        device (Optional[Union[str, torch.device]]): Device on which to create the
+            sparse tensor. Defaults to None (default device).
 
     Returns:
         tensor (torch.Tensor): Converted sparse tensor
