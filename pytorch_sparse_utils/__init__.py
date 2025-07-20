@@ -1,12 +1,12 @@
-from .shape_ops import ops
-from . import batching, conversion, indexing, minkowskiengine, ops, spconv
+__version__ = "0.1.0"
+
+from . import batching, conversion, indexing, minkowskiengine, shape_ops, spconv
 
 __all__ = [
     "indexing",
     "batching",
     "conversion",
-    "ops",
-    "ops",
+    "shape_ops",
     "minkowskiengine",
     "spconv",
 ]
