@@ -1,8 +1,9 @@
 # Third-party sparse library integration
 
 `pytorch-sparse-utils` features integrations with three major libraries for sparse arrays and tensors:
-- [Pydata sparse](https://sparse.pydata.org/), a numpy-like sparse array implementation with close numpy integration
-- [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine), an Nvidia library for convolutions on sparse tensors
+
+- [Pydata sparse](https://sparse.pydata.org/), a numpy-like sparse array implementation with close numpy integration.
+- [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine), an Nvidia library for convolutions on sparse tensors.
 - [spconv](https://github.com/traveller59/spconv), another library for convolutions on sparse tensors.
 
 All three libraries feature their own sparse tensor object formats that are distinct from the built-in PyTorch sparse tensors. `pytorch_sparse_utils`'s `conversion` module provides simple utilities to convert between the formats.

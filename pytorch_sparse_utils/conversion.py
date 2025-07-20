@@ -9,6 +9,14 @@ from .imports import ME, spconv
 
 
 def torch_sparse_to_pydata_sparse(tensor: Tensor) -> sparse.COO:
+    """Converts a sparse torch.Tensor to an equivalent Pydata sparse COO array
+
+    Args:
+        tensor (torch.Tensor): Sparse tensor to be converted
+
+    Returns:
+        array (sparse.COO): Pydata sparse COO array
+    """
     assert tensor.is_sparse
     tensor = tensor.detach().cpu().coalesce()
     assert tensor.is_coalesced
@@ -24,6 +32,14 @@ def torch_sparse_to_pydata_sparse(tensor: Tensor) -> sparse.COO:
 def pydata_sparse_to_torch_sparse(
     sparse_array: sparse.COO, device: Optional[torch.device] = None
 ) -> Tensor:
+    """Converts a Pydata sparse COO array to an equivalent sparse torch.Tensor
+
+    Args:
+        array (sparse.COO): Pydata sparse COO array to be converted
+
+    Returns:
+        tensor (torch.Tensor): Converted sparse tensor
+    """
     return torch.sparse_coo_tensor(
         indices=sparse_array.coords,  # pyright: ignore[reportArgumentType]
         values=sparse_array.data,  # pyright: ignore[reportArgumentType]
@@ -34,6 +50,14 @@ def pydata_sparse_to_torch_sparse(
 
 @imports.requires_minkowskiengine
 def torch_sparse_to_minkowski(tensor: Tensor):
+    """Converts a sparse torch.Tensor to an equivalent MinkowskiEngine SparseTensor
+
+    Args:
+        tensor (torch.Tensor): Sparse tensor to be converted
+
+    Returns:
+        sparse_tensor (MinkowskiEngine.SparseTensor): Converted sparse tensor
+    """
     assert isinstance(tensor, Tensor)
     assert tensor.is_sparse
     features = tensor.values()
@@ -52,6 +76,14 @@ def minkowski_to_torch_sparse(
     tensor: Union[Tensor, ME.SparseTensor],
     full_scale_spatial_shape: Optional[Union[Tensor, list[int]]] = None,
 ) -> Tensor:
+    """Converts a MinkowskiEngine SparseTensor to an equivalent sparse torch.Tensor
+
+    Args:
+        tensor (MinkowskiEngine.SparseTensor): Sparse tensor to be converted
+
+    Returns:
+        tensor (torch.Tensor): Converted sparse tensor
+    """
     if isinstance(tensor, Tensor):
         assert tensor.is_sparse
         return tensor
@@ -79,7 +111,7 @@ def torch_sparse_to_spconv(tensor: torch.Tensor):
         tensor (torch.Tensor): Sparse tensor to be converted
 
     Returns:
-        SparseConvTensor: Converted spconv tensor
+        SparseConvTensor (spconv.SparseConvTensor): Converted spconv tensor
     """
     if isinstance(tensor, spconv.SparseConvTensor):
         return tensor
@@ -96,7 +128,7 @@ def torch_sparse_to_spconv(tensor: torch.Tensor):
 
 
 @imports.requires_spconv
-def spconv_to_torch_sparse(tensor, squeeze=False):
+def spconv_to_torch_sparse(tensor, squeeze=False) -> Tensor:
     """Converts an spconv SparseConvTensor to a sparse torch.Tensor
 
     Args:
@@ -107,7 +139,7 @@ def spconv_to_torch_sparse(tensor, squeeze=False):
             feature dim is not 1.
 
     Returns:
-        torch.Tensor: Converted sparse torch.Tensor
+        tensor (Tensor): Converted sparse torch.Tensor
     """
     if isinstance(tensor, Tensor) and tensor.is_sparse:
         return tensor
