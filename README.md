@@ -62,7 +62,7 @@ tensor(indices=tensor([[0, 1, 2, 3],
 ```
 
 ## Feature Overview
-- Autograd-compatible implementations of bulk indexing, sparse tensor shape manipulations, and quick conversions between sparse tensor format and concatted-batch format for use with position-invariant layers (Linear, BatchNorm, etc.).
+- Autograd-compatible implementations of bulk indexing, sparse tensor shape manipulations, and quick conversions between sparse tensor format and concatenated-batch format for use with position-invariant layers (Linear, BatchNorm, etc.).
 - Interoperability with [Pydata sparse](https://sparse.pydata.org/), a numpy-like sparse array implementation, as well as [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine) and [spconv](https://github.com/traveller59/spconv), two popular PyTorch libraries for convolutions on sparse images and volumes.
 - Full TorchScript compatibility for performance.
 - Extensive unit and property-based tests to ensure correctness and reliability.
@@ -79,14 +79,15 @@ To run the test suite, you'll need to install the optional dependencies:
 pip install -e ".[tests]"
 ```
 
-Due to incompatibilities with newer PyTorch versions, MinkowskiEngine and spconv are not installed as part of the base install. For more information on installing those libraries, see their own repositories.
+Due to incompatibilities with newer CUDA versions, MinkowskiEngine and spconv are not installed as part of the base install. For more information on installing those libraries, see their own repositories.
 
 ## Documentation
 Full documentation is available on [GitHub Pages](https://mawright.github.io/pytorch-sparse-utils/).
 
 ## See Also
 pytorch-sparse-utils represents a base set of tools for more complex neural-net operations on sparse tensors. For more sparse tensor applications, see the following repositories:
-- TODO fill in once uploaded
+- [nd-rotary-encodings](https://github.com/mawright/nd-rotary-encodings): Fast and memory-efficient rotary positional encodings (RoPE) in PyTorch, with novel algorithm updates for multi-level feature pyramids for object detection and other applications.
+- [sparse-transformer-layers](https://github.com/mawright/sparse-transformer-layers): Implementations of Transformer layers tailored to sparse tensors, including variants like Multi-scale Deformable Attention. Features custom gradient checkpointing logic to effectively handle sparse tensors with potentially many nonzero entries.
 
 ## Future Plans
 - Custom C++/CUDA extensions for the most performance-critical operations
