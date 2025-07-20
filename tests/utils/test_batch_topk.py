@@ -6,12 +6,12 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from torch import Tensor
 
-from pytorch_sparse_utils.batching.batch_ops import (
+from pytorch_sparse_utils.utils import (
     batch_topk,
     BatchTopK,
     unpack_batch_topk,
 )
-from pytorch_sparse_utils.batching.batch_utils import (
+from pytorch_sparse_utils.batching import (
     seq_lengths_to_batch_offsets,
 )
 

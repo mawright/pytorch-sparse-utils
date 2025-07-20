@@ -1,4 +1,3 @@
-from .batch_ops import BatchTopK, batch_topk, lexsort_nd, unpack_batch_topk
 from .batch_utils import (
     batch_dim_to_leading_index,
     batch_indices_to_offsets,
@@ -36,9 +35,4 @@ __all__ = [
     "split_batch_concatenated_tensor",
     "batch_dim_to_leading_index",
     "batch_offsets_from_sparse_tensor_indices",
-    # batch_ops
-    "batch_topk",
-    "BatchTopK",
-    "unpack_batch_topk",
-    "lexsort_nd",
 ]

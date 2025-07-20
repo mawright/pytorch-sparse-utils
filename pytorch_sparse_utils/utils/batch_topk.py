@@ -3,7 +3,7 @@ from typing import NamedTuple, Optional, Union
 import torch
 from torch import Tensor
 
-from ..batch_utils import batch_offsets_to_seq_lengths, seq_lengths_to_batch_offsets
+from ..batching.batch_utils import batch_offsets_to_seq_lengths, seq_lengths_to_batch_offsets
 
 
 class BatchTopK(NamedTuple):
@@ -22,15 +22,15 @@ def _topk_out(
     out_indices: Tensor,
 ) -> tuple[Tensor, Tensor]:
     """Helper function to handle both Pytorch and Torchscript topk variants."""
-    if torch.jit.is_scripting():  # type: ignore
+    if torch.jit.is_scripting():  # pyright: ignore[reportPrivateImportUsage]
         return torch.topk(
             input_tensor,
             k,
             dim,
             largest,
             sorted,
-            values=out_values,  # type: ignore
-            indices=out_indices,  # type: ignore
+            values=out_values,  # pyright: ignore[reportCallIssue]
+            indices=out_indices,  # pyright: ignore[reportCallIssue]
         )
     else:
         return torch.topk(
@@ -50,6 +50,7 @@ def _normalize_k(
     return k.to(device=device, dtype=torch.long)
 
 
+@torch.jit.script
 def batch_topk(
     tensor: Tensor,
     batch_offsets: Tensor,
@@ -336,15 +337,15 @@ def unpack_batch_topk(
         dim (int): Dimension along which top-k was computed (same value that was given
             to `batch_topk`).
 
-    Returns
-    -------
-    indices_per_batch, values_per_batch
-        Lists containing one tensor per input sequence.  Each tensor has
-        the exact shape returned by a direct call to
-        ``torch.topk(subseq, …)`` for that sequence.
-
-        ``values_per_batch`` is *None* when the call to
-        :pyfunc:`batch_topk` was made with ``return_values=False``.
+    Returns:
+        indices_per_batch (list[Tensor]): List containing one tensor per input
+            sequence. Each tensor is the same shape as returned by a call to
+            torch.topk(subseq, ...) for that subsequence.
+        values_per_batch (Optional[list[Tensor]]): List containing one tensor
+            per input sequence. Like indices_per_batch, each tensor will be the
+            same shape as returned by a standalone call torch.topk(subseq, ...).
+            If `batch_topk` was originally called with `return_values=False`,
+            then `values_per_batch` will be None.
     """
     # Normalize possibly negative dim
     dim = dim if dim >= 0 else dim + len(original_shape)

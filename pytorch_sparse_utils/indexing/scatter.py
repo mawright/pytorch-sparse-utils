@@ -17,7 +17,7 @@ def scatter_to_sparse_tensor(
     """Batch updating of elements in a torch sparse tensor. Should be
     equivalent to sparse_tensor[index_tensor] = values. It works by flattening
     the sparse tensor's sparse dims and the index tensor to 1D (and converting
-    n-d indices to raveled indices), then using index_put along the flattened
+    n-d indices to raveled indices), then using index_copy along the flattened
     sparse tensor.
 
     Args:
@@ -40,6 +40,65 @@ def scatter_to_sparse_tensor(
             uses of index_copy, i.e., the result will depend on which copy occurs last.
             This imitates the behavior of scatter-like operations rather than the
             typical coalescing deduplication behavior of sparse tensors.
+
+    Examples:
+        >>> # Create a sparse tensor with values
+        >>> indices = torch.tensor([[0, 1, 2], [0, 1, 0]])
+        >>> values = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        >>> sparse = torch.sparse_coo_tensor(indices, values, (3, 3, 2))
+
+        >>> # Update existing values
+        >>> update_indices = torch.tensor([[0, 0], [1, 1]])
+        >>> new_values = torch.tensor([[10.0, 20.0], [30.0, 40.0]])
+        >>> updated = scatter_to_sparse_tensor(sparse, update_indices, new_values)
+        >>> updated.to_dense()
+        tensor([[[10., 20.],  # Updated
+                 [ 0.,  0.],
+                 [ 0.,  0.]],
+                [[ 0.,  0.],
+                 [30., 40.],  # Updated
+                 [ 0.,  0.]],
+                [[5.,  6.],   # Unchanged
+                 [ 0.,  0.],
+                 [ 0.,  0.]]])
+
+        >>> # Add new values (scatter to unspecified locations)
+        >>> new_indices = torch.tensor([[0, 2], [2, 2]])
+        >>> new_values = torch.tensor([[100.0, 200.0], [300.0, 400.0]])
+        >>> updated = scatter_to_sparse_tensor(sparse, new_indices, new_values)
+        >>> updated.to_dense()[0, 2]  # New value added
+        tensor([100., 200.])
+
+        >>> # Batch update with multiple indices
+        >>> batch_indices = torch.tensor([[[0, 0], [1, 1]],
+        ...                               [[2, 0], [0, 1]]])
+        >>> batch_values = torch.tensor([[[11., 12.], [13., 14.]],
+        ...                              [[15., 16.], [17., 18.]]])
+        >>> # Flatten batch dimensions
+        >>> flat_indices = batch_indices.reshape(-1, 2)
+        >>> flat_values = batch_values.reshape(-1, 2)
+        >>> updated = scatter_to_sparse_tensor(sparse, flat_indices, flat_values)
+
+        >>> # check_all_specified example
+        >>> indices = torch.tensor([[0, 0], [1, 1]])
+        >>> values = torch.tensor([1.0, 2.0])
+        >>> sparse = torch.sparse_coo_tensor(indices.T, values, (2, 2))
+        >>>
+        >>> # This will succeed (all indices exist)
+        >>> update_indices = torch.tensor([[0, 0]])
+        >>> update_values = torch.tensor([10.0])
+        >>> result = scatter_to_sparse_tensor(sparse, update_indices, update_values,
+        ...                                   check_all_specified=True)
+        >>>
+        >>> # This will raise ValueError (index [1, 0] doesn't exist)
+        >>> try:
+        ...     bad_indices = torch.tensor([[1, 0]])
+        ...     bad_values = torch.tensor([20.0])
+        ...     result = scatter_to_sparse_tensor(sparse, bad_indices, bad_values,
+        ...                                       check_all_specified=True)
+        ... except ValueError as e:
+        ...     print("Error:", e)
+        Error: `check_all_specified` was set to True but not all gathered values were specified
     """
     if index_tensor.is_nested:
         assert values.is_nested

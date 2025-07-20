@@ -194,20 +194,19 @@ def sparse_index_select(
 ) -> Tensor:
     """Selects values from a sparse tensor along a specified dimension.
 
-    This function is equivalent to tensor.index_select(axis, index) but works
-    correctly with the backward pass for sparse tensors. It returns a new sparse
+    This function is equivalent to Tensor.index_select(axis, index) but offers full
+    support for the backward pass for sparse tensors. It returns a new sparse
     tensor containing only the values at the specified indices along the given axis.
 
-    This function falls back to the built-in tensor.index_select(axis, index)
+    This function falls back to the built-in Tensor.index_select(axis, index)
     when gradients are not required. Benchmarking seems to indicate the built-in
     version is generally faster and more memory efficient except for some specialized
     situations on CUDA. You can always use the custom implementation by setting this
     function's input argument disable_builtin_fallback to True.
 
-    Note that the built-in tensor.index_select will trigger mysterious errors
-    of the form "RuntimeError: CUDA error: device-side assert triggered" if it is
-    given indices outside the bounds of a sparse tensor.
-    Unlike the built-in tensor.index_select, this function validates that indices
+    Note that the built-in Tensor.index_select will trigger Device-Side Assert errors
+    if it is given indices outside the bounds of a sparse tensor.
+    Unlike the built-in Tensor.index_select, this function validates that indices
     are within bounds (when check_bounds=True), making it a safer alternative even
     when gradient support isn't needed.
 
@@ -236,6 +235,44 @@ def sparse_index_select(
             - If the axis is out of bounds for tensor dimensions.
             - If check_bounds is True and the index tensor contains out-of-bounds
               indices.
+
+    Examples:
+        >>> # Create a sparse tensor with shape (4, 5)
+        >>> indices = torch.tensor([[0, 1, 2, 3], [1, 2, 3, 4]])
+        >>> values = torch.tensor([10.0, 20.0, 30.0, 40.0])
+        >>> sparse_tensor = torch.sparse_coo_tensor(indices, values, (4, 5))
+
+        >>> # Select rows 1 and 3
+        >>> selected = sparse_index_select(sparse_tensor, axis=0, index=torch.tensor([1, 3]))
+        >>> selected.to_dense()
+        tensor([[ 0., 20.,  0.,  0.,  0.],
+                [ 0.,  0.,  0.,  0., 40.]])
+
+        >>> # Select columns 2, 3, and 4
+        >>> selected = sparse_index_select(sparse_tensor, axis=1, index=torch.tensor([2, 3, 4]))
+        >>> selected.to_dense()
+        tensor([[ 0.,  0.,  0.],
+                [20.,  0.,  0.],
+                [ 0., 30.,  0.],
+                [ 0.,  0., 40.]])
+
+        >>> # Works with negative axis indexing
+        >>> selected = sparse_index_select(sparse_tensor, axis=-1, index=torch.tensor([4, 2]))
+        >>> selected.to_dense()
+        tensor([[ 0.,  0.],
+                [ 0., 20.],
+                [ 0.,  0.],
+                [40., 30.]])
+
+        >>> # Gradient support example
+        >>> values = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
+        >>> indices = torch.tensor([[0, 1, 2], [0, 1, 0]])
+        >>> x = torch.sparse_coo_tensor(indices, values, (3, 2))
+        >>> selected = sparse_index_select(x, axis=0, index=torch.tensor([0, 2]))
+        >>> loss = selected.sum()
+        >>> loss.backward()
+        >>> values.grad  # Gradient flows back to original values
+        tensor([1., 0., 1.])
     """
     if not tensor.is_sparse:
         raise ValueError("Input tensor must be sparse")
@@ -319,6 +356,48 @@ def batch_sparse_index(
         ValueError: If `check_all_specified` is set to True and not all indices in
             `index_tensor` had associated values specified in `sparse_tensor`, or if
             `index_tensor` is a nested tensor (feature planned but not implemented yet)
+
+    Examples:
+        >>> # Create a 3D sparse tensor with 2 sparse dims and 1 dense dim
+        >>> indices = torch.tensor([[0, 1, 2], [0, 1, 2]])
+        >>> values = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        >>> sparse = torch.sparse_coo_tensor(indices, values, (3, 3, 2))
+
+        >>> # Single index lookup
+        >>> index = torch.tensor([[1, 1]])
+        >>> result, mask = batch_sparse_index(sparse, index)
+        >>> result
+        tensor([[3., 4.]])
+        >>> mask
+        tensor([True])
+
+        >>> # Batch lookup with some unspecified indices
+        >>> batch_indices = torch.tensor([[0, 0], [1, 1], [2, 0]])  # Last one unspecified
+        >>> results, masks = batch_sparse_index(sparse, batch_indices)
+        >>> results
+        tensor([[1., 2.],
+                [3., 4.],
+                [0., 0.]])  # Zeros for unspecified index
+        >>> masks
+        tensor([ True,  True, False])
+
+        >>> # 2D batch of indices
+        >>> batch_indices = torch.tensor([[[0, 0], [2, 2]],
+        ...                               [[1, 1], [0, 1]]])
+        >>> results, masks = batch_sparse_index(sparse, batch_indices)
+        >>> results.shape
+        torch.Size([2, 2, 2])
+        >>> masks
+        tensor([[ True,  True],
+                [ True, False]])
+
+        >>> # Check all specified - will raise error if any index is missing
+        >>> try:
+        ...     results, masks = batch_sparse_index(sparse, torch.tensor([[0, 2]]),
+        ...                                         check_all_specified=True)
+        ... except ValueError as e:
+        ...     print("Error:", e)
+        Error: `check_all_specified` was set to True but not all gathered values were specified
     """
     if index_tensor.is_nested:
         raise ValueError("Nested index tensor not supported yet")

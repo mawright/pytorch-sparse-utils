@@ -15,6 +15,7 @@ from pytorch_sparse_utils.shape_ops import (
     sparse_resize,
     sparse_squeeze,
 )
+from pytorch_sparse_utils.shape_ops.ops import sparse_flatten_hw
 
 from . import random_sparse_tensor, random_sparse_tensor_strategy
 
@@ -153,7 +154,7 @@ class TestSparseReshape:
 
     @settings(suppress_health_check=[HealthCheck.differing_executors], deadline=None)
     @given(
-        tensor_config=random_sparse_tensor_strategy(max_dim=10),
+        tensor_config=random_sparse_tensor_strategy(max_dim=16),
         reshape_sparse=st.booleans(),
         reshape_dense=st.booleans(),
         infer_sparse=st.booleans(),
@@ -398,7 +399,7 @@ class TestSparseFlatten:
 
     @settings(suppress_health_check=[HealthCheck.differing_executors], deadline=None)
     @given(
-        tensor_config=random_sparse_tensor_strategy(max_dim=8),
+        tensor_config=random_sparse_tensor_strategy(max_dim=16),
         axis_strategy=st.data(),
     )
     def test_hypothesis(
@@ -448,6 +449,35 @@ class TestSparseFlatten:
         )
         dense_flat = dense_flat.reshape(new_shape)
         assert torch.equal(out.to_dense(), dense_flat)
+
+
+@st.composite
+def sparse_squeeze_strategy(draw: st.DrawFn):
+    tensor_config = draw(random_sparse_tensor_strategy(max_dim=16))
+
+    sparse_ndim = len(tensor_config["sparse_shape"])
+    ndim = sparse_ndim + len(tensor_config["dense_shape"])
+    dim_to_squeeze = draw(st.integers(0, ndim - 1))
+
+    make_squeezable = draw(st.booleans())
+    if make_squeezable:
+        if dim_to_squeeze < sparse_ndim:
+            tensor_config["sparse_shape"][dim_to_squeeze] = 1
+        else:
+            tensor_config["dense_shape"][dim_to_squeeze - sparse_ndim] = 1
+
+    use_negative = draw(st.booleans())
+    if use_negative:
+        dim_to_squeeze -= ndim
+
+    tensor_config.update(
+        {
+            "dim_to_squeeze": dim_to_squeeze,
+            "make_squeezable": make_squeezable,
+        }
+    )
+    return tensor_config
+
 
 
 @pytest.mark.cpu_and_cuda
@@ -547,54 +577,30 @@ class TestSparseSqueeze:
 
     @settings(suppress_health_check=[HealthCheck.differing_executors], deadline=None)
     @given(
-        tensor_config=random_sparse_tensor_strategy(max_dim=8),
-        dim_to_squeeze=st.data(),
-        make_squeezable=st.booleans(),
-        use_negative=st.booleans(),
+        tensor_config=sparse_squeeze_strategy()
     )
     def test_hypothesis(
         self,
         tensor_config: dict,
-        dim_to_squeeze: st.DataObject,
-        make_squeezable: bool,
-        use_negative: bool,
         device: str,
     ):
         """Property-based test for sparse_squeeze"""
-        # Ensure we have at least one dimension
-        if not tensor_config["sparse_shape"] and not tensor_config["dense_shape"]:
-            tensor_config["sparse_shape"] = [3]
-
-        # Optionally make one dimension size 1
-        if make_squeezable:
-            all_dims = tensor_config["sparse_shape"] + tensor_config["dense_shape"]
-            if all_dims:
-                squeeze_idx = random.randint(0, len(all_dims) - 1)
-                if squeeze_idx < len(tensor_config["sparse_shape"]):
-                    tensor_config["sparse_shape"][squeeze_idx] = 1
-                else:
-                    tensor_config["dense_shape"][
-                        squeeze_idx - len(tensor_config["sparse_shape"])
-                    ] = 1
-
         tensor = random_sparse_tensor(**tensor_config, device=device)
-        ndim = tensor.ndim
 
-        if ndim == 0:
-            assume(False)
+        shape = tensor.shape
 
-        dim = dim_to_squeeze.draw(st.integers(0, ndim - 1))
-        if use_negative:
-            dim = dim - ndim
+        squeeze_dim = tensor_config["dim_to_squeeze"]
 
-        out = sparse_squeeze(tensor, dim=dim)
+        # Check setup correct
+        if tensor_config["make_squeezable"]:
+            assert shape[squeeze_dim] == 1
 
-        # Properties:
+        out = sparse_squeeze(tensor, dim=squeeze_dim)
+
         # 1. If dimension has size 1, it should be removed
-        positive_dim = dim if dim >= 0 else ndim + dim
-        if tensor.shape[positive_dim] == 1:
+        if tensor.shape[squeeze_dim] == 1:
             expected_shape = list(tensor.shape)
-            expected_shape.pop(positive_dim)
+            expected_shape.pop(squeeze_dim)
             assert list(out.shape) == expected_shape
         else:
             # Otherwise unchanged
@@ -604,7 +610,7 @@ class TestSparseSqueeze:
         assert out._nnz() == tensor._nnz()
 
         # 3. Compare against dense squeeze
-        dense_out = torch.squeeze(tensor.to_dense(), dim=dim)
+        dense_out = tensor.to_dense().squeeze(squeeze_dim)
         assert torch.equal(out.to_dense(), dense_out)
 
 
@@ -693,18 +699,8 @@ class TestSparseResize:
         ):
             sparse_resize(tensor, [1, 2])  # First dim smaller
 
-    @example(
-        tensor_config={
-            "sparse_shape": [0],
-            "dense_shape": [0, 0],
-            "sparsity": 0.0,
-            "seed": 0,
-            "dtype": torch.float32,
-            "expand_dims": [0, 0, 1],
-        },
-    )
     @settings(suppress_health_check=[HealthCheck.differing_executors], deadline=None)
-    @given(tensor_config=resize_strategy(max_dim=10))
+    @given(tensor_config=resize_strategy(max_dim=16))
     def test_hypothesis_resize(
         self,
         tensor_config: dict,
@@ -778,16 +774,26 @@ class TestSparseResize:
                         zeros_part = new_values[tuple(zero_slices)]
                         assert torch.all(zeros_part == 0)
 
-        # 6. Compare with manually constructed expected result
-        # Create a new sparse tensor with expanded shape and check equality
-        expected_sparse = torch.sparse_coo_tensor(
-            tensor.indices(),
-            out.values(),
-            new_shape,
-            is_coalesced=tensor.is_coalesced(),
-        )
 
-        # The resized tensor should have the same structure
-        assert torch.equal(out.indices(), expected_sparse.indices())
-        assert torch.equal(out.values(), expected_sparse.values())
-        assert out.shape == expected_sparse.shape
+@st.composite
+def flatten_hw_strategy(draw: st.DrawFn):
+    tensor_config = draw(random_sparse_tensor_strategy(max_dim=16))
+    tensor_config["sparse_shape"] = draw(
+        st.lists(st.integers(0, 32), min_size=4, max_size=4)
+    )
+    tensor_config["dense_shape"] = []
+    return tensor_config
+
+
+class TestSparseFlattenHW:
+    @settings(suppress_health_check=[HealthCheck.differing_executors], deadline=None)
+    @given(tensor_config=flatten_hw_strategy())
+    def test_equivalence_with_general_flatten(self, tensor_config, device):
+        tensor = random_sparse_tensor(**tensor_config, device=device)
+
+        flattened_1: Tensor = sparse_flatten_hw(tensor)
+        flattened_2: Tensor = sparse_flatten(tensor, 1, 2)
+
+        assert torch.equal(flattened_1.indices(), flattened_2.indices())
+        assert torch.equal(flattened_1.values(), flattened_2.values())
+        assert flattened_1.shape == flattened_2.shape

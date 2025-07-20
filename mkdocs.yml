@@ -16,4 +16,6 @@ nav:
   - Home: index.md
   - Indexing: indexing.md
   - Batching: batching.md
-  - MinkowskiEngine and spconv: me_sp.md
+  - Shape operations: shape_ops.md
+  - Utility functions: utils.md
+  - Third-party libraries: me_sp.md

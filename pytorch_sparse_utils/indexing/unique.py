@@ -16,6 +16,24 @@ def unique_rows(tensor: Tensor, sorted: bool = True) -> Tensor:
         Tensor: A 1D tensor whose elements are the indices of the unique rows of
             the input tensor, i.e., if the return tensor is `inds`, then
             tensor[inds] gives a 2D tensor of all unique rows of the input tensor.
+
+    Raises:
+        OverflowError: If the tensor has values that are large enough to cause overflow
+            errors when hashing each row to a single value.
+
+    Examples:
+        >>> tensor = torch.tensor([[1, 2, 3],
+        ...                        [4, 5, 6],
+        ...                        [1, 2, 3],  # Duplicate of row 0
+        ...                        [7, 8, 9],
+        ...                        [4, 5, 6]])  # Duplicate of row 1
+        >>> unique_indices = unique_rows(tensor)
+        >>> unique_indices
+        tensor([0, 1, 3])
+        >>> tensor[unique_indices]  # All unique rows
+        tensor([[1, 2, 3],
+                [4, 5, 6],
+                [7, 8, 9]])
     """
     if tensor.ndim != 2:
         raise ValueError(f"Expected a 2D tensor, got ndim={tensor.ndim}")

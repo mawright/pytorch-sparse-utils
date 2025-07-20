@@ -35,6 +35,8 @@ def _make_linear_offsets(dim_sizes: Tensor) -> Tensor:
 def flatten_nd_indices(indices: Tensor, sizes: Tensor) -> tuple[Tensor, Tensor]:
     """Flattens N-dimensional indices into 1-dimensional scalar indices.
 
+    Similar to np.ravel_multi_index but with slightly different API.
+
     Args:
         indices (Tensor): Integer coordinate tensor of shape [N, B], where N
             is the number of dimensions to be flattened and B is the batch dimension.
@@ -44,6 +46,28 @@ def flatten_nd_indices(indices: Tensor, sizes: Tensor) -> tuple[Tensor, Tensor]:
         flat_indices (Tensor): Flattened indices tensor, of shape [1, B]
         offsets (Tensor): Strides that were used for flattening (needed for unflatten),
             of shape [N]
+
+    Examples:
+        >>> # 2D indices to 1D
+        >>> indices = torch.tensor([[0, 1, 2],  # row indices
+        ...                         [0, 2, 1]]) # col indices
+        >>> sizes = torch.tensor([3, 3])  # 3x3 grid
+        >>> flat, offsets = flatten_nd_indices(indices, sizes)
+        >>> flat
+        tensor([[0, 5, 7]])  # 0*3+0=0, 1*3+2=5, 2*3+1=7
+        >>> offsets
+        tensor([3, 1])
+
+        >>> # 3D indices to 1D
+        >>> indices = torch.tensor([[0, 1],    # dim 0
+        ...                         [1, 0],    # dim 1
+        ...                         [2, 1]])   # dim 2
+        >>> sizes = torch.tensor([2, 2, 3])  # 2x2x3 tensor
+        >>> flat, offsets = flatten_nd_indices(indices, sizes)
+        >>> flat
+        tensor([[5, 7]])  # 0*6+1*3+2=5, 1*6+0*3+1=7
+        >>> offsets
+        tensor([6, 3, 1])
     """
     offsets = _make_linear_offsets(sizes)  # [N]
     flat_indices = (indices * offsets.unsqueeze(-1)).sum(0, keepdim=True)
@@ -65,6 +89,34 @@ def unflatten_nd_indices(
 
     Returns:
         Tensor: N-D indices tensor of shape [N, B]
+
+    Examples:
+        >>> # Unflatten 1D to 2D indices (inverse of flatten)
+        >>> flat_indices = torch.tensor([[0, 5, 7]])
+        >>> dim_sizes = torch.tensor([3, 3])  # 3x3 grid
+        >>> nd_indices = unflatten_nd_indices(flat_indices, dim_sizes)
+        >>> nd_indices
+        tensor([[0, 1, 2],  # row indices
+                [0, 2, 1]]) # col indices
+
+        >>> # Unflatten to 3D indices
+        >>> flat_indices = torch.tensor([[5, 7, 23]])
+        >>> dim_sizes = torch.tensor([2, 3, 4])  # 2x3x4 tensor
+        >>> nd_indices = unflatten_nd_indices(flat_indices, dim_sizes)
+        >>> nd_indices
+        tensor([[0, 0, 1],  # dim 0
+                [1, 1, 2],  # dim 1
+                [1, 3, 3]]) # dim 2
+
+        >>> # Using precomputed offsets (more efficient for repeated calls)
+        >>> dim_sizes = torch.tensor([4, 5, 6])
+        >>> offsets = _make_linear_offsets(dim_sizes)  # [30, 6, 1]
+        >>> flat_indices = torch.tensor([[0, 31, 119]])
+        >>> nd_indices = unflatten_nd_indices(flat_indices, dim_sizes, offsets)
+        >>> nd_indices
+        tensor([[0, 1, 3],
+                [0, 0, 4],
+                [0, 1, 5]])
     """
     if offsets is None:
         offsets = _make_linear_offsets(dim_sizes)
@@ -104,13 +156,49 @@ def flatten_sparse_indices(
         end_axis (int): Ending axis (inclusive) of the dimensions to flatten.
 
     Returns:
-        tuple[Tensor, Tensor, Tensor]: A tuple containing:
-            - new_indices (Tensor): The flattened indices of shape (D, N), where D is
-                the number of dimensions in the flattened tensor and N is the number
-                of nonzero elements.
-            - new_shape (Tensor): The new shape of the flattened tensor of shape (D,)
-            - dim_linear_offsets (Tensor): The linear offsets used during flattening,
-                of shape (K,), where K is the number of flattened dimensions.
+        - new_indices (Tensor): The flattened indices of shape (D, N), where D is
+            the number of dimensions in the flattened tensor and N is the number
+            of nonzero elements.
+        - new_shape (Tensor): The new shape of the flattened tensor of shape (D,)
+        - dim_linear_offsets (Tensor): The linear offsets used during flattening,
+            of shape (K,), where K is the number of flattened dimensions.
+
+    Examples:
+        >>> # Create a 3D sparse tensor
+        >>> indices = torch.tensor([[0, 1, 2], [0, 1, 0], [1, 2, 0]])
+        >>> values = torch.tensor([1.0, 2.0, 3.0])
+        >>> sparse = torch.sparse_coo_tensor(indices, values, (3, 3, 3))
+
+        >>> # Flatten dimensions 0 and 1 (first two dimensions)
+        >>> new_indices, new_shape, offsets = flatten_sparse_indices(sparse, 0, 1)
+        >>> new_indices
+        tensor([[0, 4, 6],  # Flattened indices for dims 0-1
+                [1, 2, 0]]) # Unchanged indices for dim 2
+        >>> new_shape
+        tensor([9, 3])  # 3x3 flattened to 9, last dim unchanged
+        >>> offsets
+        tensor([3, 1])
+
+        >>> # Flatten all dimensions
+        >>> new_indices, new_shape, offsets = flatten_sparse_indices(sparse, 0, 2)
+        >>> new_indices
+        tensor([[1, 14, 18]])  # All indices flattened to 1D
+        >>> new_shape
+        tensor([27])  # 3x3x3 = 27
+
+        >>> # Create a 4D sparse tensor and flatten middle dimensions
+        >>> indices = torch.tensor([[0, 1], [1, 0], [2, 1], [0, 2]])
+        >>> values = torch.tensor([1.0, 2.0])
+        >>> sparse = torch.sparse_coo_tensor(indices, values, (2, 2, 3, 3))
+        >>>
+        >>> # Flatten dimensions 1 and 2
+        >>> new_indices, new_shape, offsets = flatten_sparse_indices(sparse, 1, 2)
+        >>> new_indices
+        tensor([[0, 1],  # Dim 0 unchanged
+                [5, 1],  # Dims 1-2 flattened: 1*3+2=5, 0*3+1=1
+                [0, 2]]) # Dim 3 unchanged
+        >>> new_shape
+        tensor([2, 6, 3])  # Shape is now [2, 2*3, 3]
     """
     tensor_indices = tensor.indices()  # sparse_dim x nnz (counterintuitive)
     indices_to_flatten = tensor_indices[start_axis : end_axis + 1]
@@ -168,6 +256,40 @@ def linearize_sparse_and_index_tensors(
             sparse_tensor.indices().
         index_tensor_linearized (Tensor): Linearized version of index_tensor
             with the last dimension squeezed out.
+
+    Examples:
+        >>> # Create a 2D sparse tensor
+        >>> indices = torch.tensor([[0, 1, 2], [0, 2, 1]])
+        >>> values = torch.tensor([1.0, 2.0, 3.0])
+        >>> sparse = torch.sparse_coo_tensor(indices, values, (3, 3))
+
+        >>> # Indices to look up
+        >>> lookup_indices = torch.tensor([[0, 0], [1, 2], [2, 1]])
+        >>>
+        >>> sparse_lin, lookup_lin = linearize_sparse_and_index_tensors(sparse, lookup_indices)
+        >>> sparse_lin
+        tensor([0, 5, 7])  # 0*3+0=0, 1*3+2=5, 2*3+1=7
+        >>> lookup_lin
+        tensor([0, 5, 7])  # Same linearization scheme
+
+        >>> # Batch of indices with different shape
+        >>> batch_indices = torch.tensor([[[0, 0], [1, 1]],
+        ...                               [[2, 2], [0, 2]]])
+        >>> sparse_lin, batch_lin = linearize_sparse_and_index_tensors(sparse, batch_indices)
+        >>> batch_lin
+        tensor([0, 4, 8, 2])  # Flattened: 0, 1*3+1=4, 2*3+2=8, 0*3+2=2
+
+        >>> # 3D sparse tensor
+        >>> indices = torch.tensor([[0, 1], [0, 1], [1, 0]])
+        >>> values = torch.tensor([1.0, 2.0])
+        >>> sparse = torch.sparse_coo_tensor(indices, values, (2, 2, 2))
+        >>>
+        >>> lookup = torch.tensor([[0, 0, 1], [1, 1, 0]])
+        >>> sparse_lin, lookup_lin = linearize_sparse_and_index_tensors(sparse, lookup)
+        >>> sparse_lin
+        tensor([1, 6])  # 0*4+0*2+1=1, 1*4+1*2+0=6
+        >>> lookup_lin
+        tensor([1, 6])
     """
     if index_tensor.shape[-1] != sparse_tensor.sparse_dim():
         if (
@@ -240,6 +362,55 @@ def get_sparse_index_mapping(
             indices in index_tensor where values where actually specified in
             the sparse tensor and False for indices that were unspecified in
             the sparse tensor.
+
+    Examples:
+        >>> # Create a sparse tensor
+        >>> indices = torch.tensor([[0, 1, 2], [0, 1, 0]])
+        >>> values = torch.tensor([10.0, 20.0, 30.0])
+        >>> sparse = torch.sparse_coo_tensor(indices, values, (3, 3))
+
+        >>> # Look up existing indices
+        >>> lookup = torch.tensor([[0, 0], [1, 1], [2, 0]])
+        >>> positions, mask = get_sparse_index_mapping(sparse, lookup)
+        >>> positions
+        tensor([0, 1, 2])  # Positions in values tensor
+        >>> mask
+        tensor([True, True, True])  # All indices exist
+        >>> sparse.values()[positions]
+        tensor([10., 20., 30.])
+
+        >>> # Look up mix of existing and non-existing indices
+        >>> lookup = torch.tensor([[0, 0], [0, 1], [1, 0]])
+        >>> positions, mask = get_sparse_index_mapping(sparse, lookup)
+        >>> positions
+        tensor([0, 0, 0])  # Non-existing indices mapped to 0 (sanitized)
+        >>> mask
+        tensor([True, False, False])  # Only first index exists
+
+        >>> # With sanitize=False to get insertion positions
+        >>> positions, mask = get_sparse_index_mapping(sparse, lookup,
+        ...                                            sanitize_linear_index_tensor=False)
+        >>> positions
+        tensor([0, 1, 1])  # Position 1 is where [0,1] and [1,0] would be inserted
+        >>> mask
+        tensor([True, False, False])
+
+        >>> # Batch lookup
+        >>> batch_lookup = torch.tensor([[[0, 0], [2, 0]],
+        ...                              [[1, 1], [0, 2]]])
+        >>> positions, mask = get_sparse_index_mapping(sparse, batch_lookup)
+        >>> positions
+        tensor([[0, 2],
+                [1, 0]])
+        >>> mask
+        tensor([[True, True],
+                [True, False]])
+
+        >>> # Out of bounds indices
+        >>> lookup = torch.tensor([[0, 0], [3, 0], [-1, 0]])  # 3 and -1 are out of bounds
+        >>> positions, mask = get_sparse_index_mapping(sparse, lookup)
+        >>> mask
+        tensor([True, False, False])  # Out of bounds treated as unspecified
     """
     sparse_dim = sparse_tensor.sparse_dim()
     sparse_nnz = sparse_tensor._nnz()
@@ -336,6 +507,31 @@ def gather_mask_and_fill(
 
     Raises:
         ValueError: If indices and mask have different shapes.
+
+    Examples:
+        >>> # Basic usage: gather and mask 1D values
+        >>> values = torch.tensor([10.0, 20.0, 30.0, 40.0])
+        >>> indices = torch.tensor([0, 2, 1, 3])
+        >>> mask = torch.tensor([True, True, False, True])
+        >>> gather_mask_and_fill(values, indices, mask)
+        tensor([10., 30.,  0., 40.])
+
+        >>> # Multi-dimensional values
+        >>> values = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        >>> indices = torch.tensor([2, 0, 1])
+        >>> mask = torch.tensor([True, False, True])
+        >>> gather_mask_and_fill(values, indices, mask)
+        tensor([[5., 6.],
+                [0., 0.],
+                [3., 4.]])
+
+        >>> # 2D indices with custom fill
+        >>> values = torch.tensor([10.0, 20.0, 30.0])
+        >>> indices = torch.tensor([[0, 1], [2, 0]])
+        >>> mask = torch.tensor([[True, False], [True, True]])
+        >>> gather_mask_and_fill(values, indices, mask, fill=torch.tensor(-1.0))
+        tensor([[10., -1.],
+                [30., 10.]])
     """
     input_values_1d = False
     if values.ndim == 1:

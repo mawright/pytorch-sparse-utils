@@ -4,6 +4,7 @@ import torch
 from torch import Tensor
 
 
+@torch.jit.script
 def _lexsort_nd_robust(tensor: Tensor, descending: bool) -> tuple[Tensor, Tensor]:
     """Iterative (true) lexicographic sort. Complexity: O(V * N log N)
 
@@ -69,6 +70,7 @@ class LexsortIntOut(NamedTuple):
     has_duplicates: Optional[Tensor] = None
 
 
+@torch.jit.script
 def _compute_sorted_inverse(sorted_tensor: Tensor) -> tuple[Tensor, Tensor]:
     """Computes the output of sorted_tensor.unique(dim=-1, return_inverse=True) for an
     already-sorted tensor.
@@ -90,6 +92,7 @@ def _compute_sorted_inverse(sorted_tensor: Tensor) -> tuple[Tensor, Tensor]:
     return sorted_inverse, has_duplicates
 
 
+@torch.jit.script
 def _lexsort_nd_int(
     tensor: Tensor, descending: bool, stable: bool, return_unique_inverse: bool = False
 ) -> LexsortIntOut:
@@ -194,15 +197,7 @@ def _lexsort_nd_int(
     return LexsortIntOut(sort_indices)
 
 
-_INT_TYPES = (
-    torch.int8,
-    torch.int16,
-    torch.int32,
-    torch.int64,
-    torch.uint8,
-)
-
-
+@torch.jit.script
 def _permute_dims(
     tensor: Tensor, vector_dim: int, sort_dim: int
 ) -> tuple[Tensor, list[int]]:
@@ -215,7 +210,7 @@ def _permute_dims(
     return tensor_permuted, perm
 
 
-# @torch.jit.script
+@torch.jit.script
 def lexsort_nd(
     tensor: Tensor,
     vector_dim: int,
@@ -312,6 +307,15 @@ def lexsort_nd(
     # and sort_dim to first position for faster sorting
     tensor_permuted, perm = _permute_dims(tensor, vector_dim, sort_dim)
     tensor_permuted = tensor_permuted.contiguous()
+
+    # List of integer types
+    _INT_TYPES = (
+        torch.int8,
+        torch.int16,
+        torch.int32,
+        torch.int64,
+        torch.uint8,
+    )
 
     # Pick appropriate sorting subroutine
     if force_robust:

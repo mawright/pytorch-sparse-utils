@@ -9,10 +9,8 @@ from torch import Tensor
 import pytest
 
 
-from pytorch_sparse_utils.batching.batch_ops.lexsort_nd import (
-    _lexsort_nd_float,
+from pytorch_sparse_utils.utils.lexsort_nd import (
     _lexsort_nd_int,
-    _lexsort_nd_robust,
     lexsort_nd,
     _permute_dims,
 )
@@ -555,7 +553,6 @@ class TestProperties:
     @settings(
         deadline=None,
         suppress_health_check=[HealthCheck.differing_executors],
-        max_examples=1000,
     )
     @given(
         inputs=lexsort_nd_inputs(

@@ -8,7 +8,7 @@ from . import imports
 from .imports import ME, spconv
 
 
-def torch_sparse_to_pydata_sparse(tensor: Tensor) -> sparse.SparseArray:
+def torch_sparse_to_pydata_sparse(tensor: Tensor) -> sparse.COO:
     assert tensor.is_sparse
     tensor = tensor.detach().cpu().coalesce()
     assert tensor.is_coalesced
@@ -33,7 +33,6 @@ def pydata_sparse_to_torch_sparse(
 
 
 @imports.requires_minkowskiengine
-@torch.compiler.disable
 def torch_sparse_to_minkowski(tensor: Tensor):
     assert isinstance(tensor, Tensor)
     assert tensor.is_sparse
@@ -215,7 +214,9 @@ def __me_sparse(
         size = size.squeeze()
 
         max_batch = tensor._manager.number_of_unique_batch_indices()
-        size = torch.Size([max_batch, *size, tensor.F.size(1)])
+        size = torch.Size(
+            [max_batch, *size, tensor.F.size(1)]  # pyright: ignore[reportArgumentType]
+        )
 
     sparse_tensor = torch_sparse_Tensor(
         new_coords.t().to(tensor.F.device), tensor.F, size

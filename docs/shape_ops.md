@@ -2,6 +2,8 @@
 
 The `shape_ops` module contains sparse tensor versions of common reshaping operations like `reshape` and `flatten`, which are not implemented for sparse tensors in base PyTorch.
 
+---
+
 ::: shape_ops
     options:
         members:
