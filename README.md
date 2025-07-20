@@ -1,4 +1,7 @@
 # pytorch-sparse-utils
+
+[![Documentation Status](https://github.com/mawright/pytorch-sparse-utils/actions/workflows/docs.yml/badge.svg)](https://mawright.github.io/pytorch-sparse-utils/)
+
 Low-level utilities for PyTorch sparse tensors and operations.
 
 ## Introduction
@@ -77,7 +80,7 @@ pip install -e ".[tests]"
 Due to incompatibilities with newer PyTorch versions, MinkowskiEngine and spconv are not installed as part of the base install. For more information on installing those libraries, see their own repositories.
 
 ## Documentation
-
+Full documentation is available on [GitHub Pages](https://mawright.github.io/pytorch-sparse-utils/).
 
 ## See Also
 pytorch-sparse-utils represents a base set of tools for more complex neural-net operations on sparse tensors. For more sparse tensor applications, see the following repositories:
