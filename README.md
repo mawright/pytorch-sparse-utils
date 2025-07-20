@@ -1,6 +1,8 @@
 # pytorch-sparse-utils
 
+[![Tests](https://github.com/mawright/pytorch-sparse-utils/actions/workflows/tests.yml/badge.svg)](https://github.com/mawright/pytorch-sparse-utils/actions/workflows/tests.yml)
 [![Documentation Status](https://github.com/mawright/pytorch-sparse-utils/actions/workflows/docs.yml/badge.svg)](https://mawright.github.io/pytorch-sparse-utils/)
+[![License](https://img.shields.io/github/license/mawright/pytorch-sparse-utils)](https://github.com/mawright/pytorch-sparse-utils/blob/main/LICENSE)
 
 Low-level utilities for PyTorch sparse tensors and operations.
 
