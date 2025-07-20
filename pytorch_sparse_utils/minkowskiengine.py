@@ -13,8 +13,8 @@ class MinkowskiLayerNorm(nn.Module):
         eps: float = 0.00001,
         elementwise_affine: bool = True,
         bias: bool = True,
-        device: Any | None = None,
-        dtype: Any | None = None,
+        device: Union[Any, None] = None,
+        dtype: Union[Any, None] = None,
     ):
         super().__init__()
         self.layer_norm = nn.LayerNorm(
