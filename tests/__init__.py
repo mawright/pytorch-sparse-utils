@@ -31,6 +31,7 @@ def random_sparse_tensor(
     dtype: torch.dtype = torch.float32,
     device: Optional[Union[torch.device, str]] = None,
     requires_grad: bool = False,
+    **kwargs,
 ) -> Tensor:
     assert 0.0 <= sparsity <= 1.0
     if device is None:

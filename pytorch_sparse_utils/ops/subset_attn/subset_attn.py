@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 from torch import Tensor, nn
 
-from pytorch_sparse_utils.indexing.script_funcs import get_sparse_index_mapping
+from pytorch_sparse_utils.indexing.utils import get_sparse_index_mapping
 
 from .autograd import GatherAndSubsetAttentionFunction
 

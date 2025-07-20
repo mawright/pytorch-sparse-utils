@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from pytorch_sparse_utils.indexing.script_funcs import gather_mask_and_fill
+from pytorch_sparse_utils.indexing.utils import gather_mask_and_fill
 
 
 @torch.jit.script

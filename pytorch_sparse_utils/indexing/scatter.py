@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor
 
-from .script_funcs import (
+from .utils import (
     _make_linear_offsets,
     get_sparse_index_mapping,
     unflatten_nd_indices,

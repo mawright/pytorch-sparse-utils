@@ -9,7 +9,9 @@ from ..validation import validate_atleast_nd
 
 
 @torch.jit.script
-def split_batch_concatenated_tensor(tensor: Tensor, batch_offsets: Tensor) -> list[Tensor]:
+def split_batch_concatenated_tensor(
+    tensor: Tensor, batch_offsets: Tensor
+) -> list[Tensor]:
     """Split a batch-concatenated tensor based on batch offsets.
 
     Args:
@@ -707,7 +709,7 @@ def padded_to_sparse_tensor(
     batched_values: Tensor,
     batched_indices: Tensor,
     pad_mask: Tensor,
-    sparse_shape: Optional[list[int]] = None,
+    sparse_tensor_shape: Optional[list[int]] = None,
 ) -> Tensor:
     """Converts padded dense format back to a sparse COO tensor.
 
@@ -721,7 +723,7 @@ def padded_to_sparse_tensor(
             (batch_size, max_seq_length, num_index_dims)
         pad_mask (Tensor): Boolean mask indicating padded positions with shape
             (batch_size, max_seq_length). True indicates padding.
-        sparse_shape (Optional(list[int])): Shape of the output sparse tensor.
+        sparse_tensor_shape (Optional(list[int])): Shape of the output sparse tensor.
             If None, the resulting sparse tensor shape will be inferred by the
             torch.sparse_coo_tensor constructor.
 
@@ -740,9 +742,12 @@ def padded_to_sparse_tensor(
     stacked_values, batch_offsets = padded_to_concatenated(batched_values, pad_mask)
     stacked_indices, batch_offsets_2 = padded_to_concatenated(batched_indices, pad_mask)
     assert torch.equal(batch_offsets, batch_offsets_2)
-    return torch.sparse_coo_tensor(
-        stacked_indices.T, stacked_values, sparse_shape
-    ).coalesce()
+    if sparse_tensor_shape is not None:
+        return torch.sparse_coo_tensor(
+            stacked_indices.T, stacked_values, sparse_tensor_shape
+        ).coalesce()
+    else:
+        return torch.sparse_coo_tensor(stacked_indices.T, stacked_values).coalesce()
 
 
 @torch.jit.script
@@ -805,4 +810,9 @@ def concatenated_to_sparse_tensor(
         tensor([[1., 2., 0.],
                 [3., 0., 4.]])
     """
-    return torch.sparse_coo_tensor(indices.T, values, sparse_tensor_shape)
+    if sparse_tensor_shape is not None:
+        return torch.sparse_coo_tensor(
+            indices.T, values, sparse_tensor_shape
+        ).coalesce()
+    else:
+        return torch.sparse_coo_tensor(indices.T, values).coalesce()

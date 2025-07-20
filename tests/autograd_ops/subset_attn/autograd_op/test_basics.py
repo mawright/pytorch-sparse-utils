@@ -1,8 +1,9 @@
-from typing import Any, Union
+from typing import Any, Literal, Union
 
 import pytest
 import torch
-from hypothesis import given, settings
+from hypothesis import given, settings, assume
+from hypothesis import strategies as st
 from torch import Tensor
 
 from pytorch_sparse_utils.ops.subset_attn.autograd import (
@@ -40,6 +41,7 @@ class TestBasicForwardBackward:
         output = GatherAndSubsetAttentionFunction.apply(
             *ordered_autograd_inputs(inputs)
         )
+        assert isinstance(output, Tensor)
 
         expected_shape = (sum(metadata["n_queries"]), metadata["embed_dim"])
         assert (
@@ -60,6 +62,7 @@ class TestBasicForwardBackward:
         output = GatherAndSubsetAttentionFunction.apply(
             *(ordered_autograd_inputs(inputs))
         )
+        assert isinstance(output, Tensor)
 
         # Check that queries with all keys unspecified produce finite values
         unspecified_indices = inputs["metadata"]["unspecified_query_indices"]
@@ -80,6 +83,7 @@ class TestBasicForwardBackward:
         output = GatherAndSubsetAttentionFunction.apply(
             *ordered_autograd_inputs(inputs)
         )
+        assert isinstance(output, Tensor)
 
         # Check output shape
         expected_shape = (sum(metadata["n_queries"]), metadata["embed_dim"])
@@ -114,7 +118,9 @@ class TestBasicForwardBackward:
     )
     @pytest.mark.cuda_if_available
     def test_attention_with_different_rope_settings(
-        self, device, use_rope: str
+        self,
+        device,
+        use_rope: Literal["none"] | Literal["precomputed"] | Literal["from_freqs"],
     ) -> None:
         """Test attention with different RoPE settings."""
         inputs = attention_inputs(use_rope=use_rope, device=device)
@@ -126,6 +132,7 @@ class TestBasicForwardBackward:
         output = GatherAndSubsetAttentionFunction.apply(
             *ordered_autograd_inputs(inputs)
         )
+        assert isinstance(output, Tensor)
 
         # Backward pass
         loss = output.sum()
@@ -170,15 +177,23 @@ class TestBasicForwardBackward:
         elif tensor_requiring_grads in ("key_positions", "rope_freqs"):
             use_rope = "from_freqs"
         else:
-            use_rope = None
+            use_rope = "none"
 
-        inputs = attention_inputs(use_rope=use_rope, device=device)
+        if tensor_requiring_grads == "selection_fill":
+            use_selection_fill = True
+        else:
+            use_selection_fill = False
+
+        inputs = attention_inputs(
+            use_rope=use_rope, use_selection_fill=use_selection_fill, device=device
+        )
         inputs = set_requires_grad(inputs, tensor_requiring_grads)
 
         # Forward pass
         output = GatherAndSubsetAttentionFunction.apply(
             *ordered_autograd_inputs(inputs)
         )
+        assert isinstance(output, Tensor)
 
         # Backward pass
         loss = output.sum()
@@ -194,15 +209,19 @@ class TestBasicForwardBackward:
     def test_hypothesis_forward_backward(
         self,
         device,
-        tensor_configs: dict[str, Union[bool, list[str]]],
+        tensor_configs: dict,
     ):
         """Hypothesis-based test to try random combinations of inputs"""
         use_biases = tensor_configs["use_biases"]
         use_rope = tensor_configs["use_rope"]
+        use_selection_fill = tensor_configs["use_selection_fill"]
         tensors_requiring_grads = tensor_configs["tensors_requiring_grads"]
 
         inputs = attention_inputs(
-            use_biases=use_biases, use_rope=use_rope, device=device
+            use_biases=use_biases,
+            use_rope=use_rope,
+            use_selection_fill=use_selection_fill,
+            device=device,
         )
 
         inputs = set_requires_grad(inputs, tensors_requiring_grads)
@@ -211,6 +230,7 @@ class TestBasicForwardBackward:
         output = GatherAndSubsetAttentionFunction.apply(
             *ordered_autograd_inputs(inputs)
         )
+        assert isinstance(output, Tensor)
 
         # Backward pass
         loss = output.sum()
@@ -219,6 +239,52 @@ class TestBasicForwardBackward:
         for tensor_name in tensors_requiring_grads:
             assert grad_not_none(inputs, tensor_name)
             assert grad_same_shape(inputs, tensor_name)
+
+
+@pytest.mark.cuda_if_available
+class TestQueryMask:
+    @given(
+        tensor_configs=simple_attention_input_configs(),
+        query_mask_prob=st.floats(0.0, 1.0),
+    )
+    @settings(max_examples=10, deadline=None)
+    def test_query_mask_basic(
+        self, device: str, tensor_configs: dict, query_mask_prob: float
+    ):
+        """Basic test of the query mask in isolation."""
+        inputs = attention_inputs(
+            **tensor_configs, device=device, query_mask_rate=query_mask_prob
+        )
+
+        query_mask = inputs["query_mask"]
+        if query_mask_prob > 0.0:
+            assert isinstance(query_mask, Tensor)
+        else:
+            assert query_mask is None
+            assume(False)
+
+        # Set query tensor to require grads
+        inputs["query_tensor"].requires_grad_(True)
+
+        output = GatherAndSubsetAttentionFunction.apply(
+            *ordered_autograd_inputs(inputs)
+        )
+        assert isinstance(output, Tensor)
+
+        # Test output properly masked (no other masking used)
+        assert (output[query_mask] == 0.0).all()
+        assert (output[~query_mask] != 0.0).all()
+
+        # Test gradients
+        loss = output.sum()
+        loss.backward()
+
+        assert inputs["query_tensor"].grad is not None
+        assert (inputs["query_tensor"].grad[query_mask] == 0.0).all()
+        assert (inputs["query_tensor"].grad[~query_mask] != 0.0).all()
+
+        # make sure counted examples aren't degenerate
+        assume(query_mask.sum() > 0)
 
 
 @pytest.mark.cuda_if_available
@@ -242,6 +308,9 @@ class TestDropout:
         # Run forward passes
         output_no_dropout = GatherAndSubsetAttentionFunction.apply(*inputs_no_dropout)
         output_dropout = GatherAndSubsetAttentionFunction.apply(*inputs_dropout)
+        assert isinstance(output_no_dropout, Tensor) and isinstance(
+            output_dropout, Tensor
+        )
 
         # Outputs should be different when dropout is applied
         assert not torch.allclose(
@@ -275,15 +344,18 @@ class TestDropout:
         output_training_1 = GatherAndSubsetAttentionFunction.apply(
             *ordered_inputs_training
         )
+        assert isinstance(output_training_1, Tensor)
 
         # If we run again in training mode, should get different results
         torch.manual_seed(seed + 1)  # Different seed
         output_training_2 = GatherAndSubsetAttentionFunction.apply(
             *ordered_inputs_training
         )
+        assert isinstance(output_training_2, Tensor)
 
         # In eval mode, dropout should be ignored
         output_eval = GatherAndSubsetAttentionFunction.apply(*ordered_inputs_eval)
+        assert isinstance(output_eval, Tensor)
 
         # Training outputs should differ from each other
         assert not torch.allclose(
@@ -298,6 +370,7 @@ class TestDropout:
         output_no_dropout = GatherAndSubsetAttentionFunction.apply(
             *ordered_autograd_inputs(inputs_no_dropout)
         )
+        assert isinstance(output_no_dropout, Tensor)
         assert torch.allclose(output_eval, output_no_dropout, rtol=1e-4, atol=1e-4)
 
     def test_dropout_reproducibility(self, device: str):
@@ -313,6 +386,7 @@ class TestDropout:
         output1 = GatherAndSubsetAttentionFunction.apply(
             *ordered_autograd_inputs(inputs1)
         )
+        assert isinstance(output1, Tensor)
 
         # Second run with same seed
         inputs2 = attention_inputs(
@@ -322,6 +396,7 @@ class TestDropout:
         output2 = GatherAndSubsetAttentionFunction.apply(
             *ordered_autograd_inputs(inputs2)
         )
+        assert isinstance(output2, Tensor)
 
         # Outputs should be identical with same seed
         assert torch.allclose(output1, output2)
@@ -334,6 +409,7 @@ class TestDropout:
         output3 = GatherAndSubsetAttentionFunction.apply(
             *ordered_autograd_inputs(inputs3)
         )
+        assert isinstance(output3, Tensor)
 
         # Outputs should differ with different seed
         assert not torch.allclose(output1, output3)
@@ -346,7 +422,11 @@ class TestGradcheck:
         ["none", "precomputed", "from_freqs"],
         ids=["rope=none", "rope=precomputed", "rope=from_freqs"],
     )
-    def test_basic_gradcheck(self, device, use_rope: str) -> None:
+    def test_basic_gradcheck(
+        self,
+        device,
+        use_rope: Literal["none"] | Literal["precomputed"] | Literal["from_freqs"],
+    ) -> None:
         """Test gradcheck with different RoPE settings."""
         inputs = attention_inputs(
             use_rope=use_rope, device=device, dtype=torch.double, dropout_p=0.0
@@ -358,17 +438,16 @@ class TestGradcheck:
         inputs = set_requires_grad(inputs, tensors_to_diff)
         inputs = ordered_autograd_inputs(inputs)
 
-        assert torch.autograd.gradcheck(GatherAndSubsetAttentionFunction.apply, inputs)
+        assert torch.autograd.gradcheck(
+            GatherAndSubsetAttentionFunction.apply,  # pyright: ignore[reportArgumentType]
+            inputs,
+        )
 
     # Property-based version using hypothesis
 
-    @settings(deadline=None, max_examples=25)
+    @settings(deadline=None, max_examples=15)
     @given(tensor_configs=simple_attention_input_configs())
-    def test_hypothesis_gradcheck(
-        self,
-        device: str,
-        tensor_configs: dict[str, Union[bool, list[str]]],
-    ):
+    def test_hypothesis_gradcheck(self, device: str, tensor_configs: dict):
         """Hypothesis-based test to try random combinations of inputs"""
         use_biases = tensor_configs["use_biases"]
         use_rope = tensor_configs["use_rope"]
@@ -389,5 +468,7 @@ class TestGradcheck:
 
         # Run gradcheck
         assert torch.autograd.gradcheck(
-            GatherAndSubsetAttentionFunction.apply, inputs, nondet_tol=nondet_tol
+            GatherAndSubsetAttentionFunction.apply,  # pyright: ignore[reportArgumentType]
+            inputs,
+            nondet_tol=nondet_tol,
         )

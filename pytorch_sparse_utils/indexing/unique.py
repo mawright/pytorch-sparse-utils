@@ -1,6 +1,6 @@
 import torch
 from torch import Tensor
-from pytorch_sparse_utils.indexing.script_funcs import flatten_nd_indices
+from pytorch_sparse_utils.indexing.utils import flatten_nd_indices
 
 
 @torch.jit.script

@@ -1,5 +1,5 @@
 from typing import Optional
-from pytorch_sparse_utils.indexing.script_funcs import gather_mask_and_fill
+from pytorch_sparse_utils.indexing.utils import gather_mask_and_fill
 
 
 import torch

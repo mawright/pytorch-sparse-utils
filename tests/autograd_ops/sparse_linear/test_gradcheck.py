@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch.autograd import gradcheck
 
-from pytorch_sparse_utils.indexing.script_funcs import get_sparse_index_mapping
+from pytorch_sparse_utils.indexing.utils import get_sparse_index_mapping
 
 # Import module functions
 from pytorch_sparse_utils.ops.linear.autograd import (
