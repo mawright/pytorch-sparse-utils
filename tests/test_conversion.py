@@ -242,7 +242,7 @@ class TestSpconv:
         )
 
         with pytest.raises(ValueError, match="Got `squeeze`=True, but"):
-            result = spconv_to_torch_sparse(sparse_conv_tensor, squeeze=True)
+            _ = spconv_to_torch_sparse(sparse_conv_tensor, squeeze=True)
 
 
     def test_roundtrip_spconv(self):

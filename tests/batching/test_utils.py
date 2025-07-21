@@ -8,6 +8,7 @@ from pytorch_sparse_utils.batching.batch_utils import (
     seq_lengths_to_batch_offsets,
     batch_offsets_to_seq_lengths,
     batch_offsets_to_indices,
+    batch_indices_to_offsets,
     seq_lengths_to_indices,
     concatenated_to_padded,
     padded_to_concatenated,
@@ -190,6 +191,21 @@ class TestBatchOffsetsToIndices:
         result = batch_offsets_to_indices(batch_offsets, total_seq_length)
         expected = torch.tensor([0, 0, 0, 1, 1, 1, 1, 2, 2, 2], device=device)
         assert torch.equal(result, expected)
+
+@pytest.mark.cpu_and_cuda
+class TestBatchIndicesToOffsets:
+    def test_basic_functionality(self, device):
+        """Test basic functionality with batch_offsets_to_indices"""
+        batch_offsets = torch.tensor([0, 3, 7, 10], device=device)
+        indices = batch_offsets_to_indices(batch_offsets)
+        offsets_2 = batch_indices_to_offsets(indices)
+        assert torch.equal(batch_offsets, offsets_2)
+
+    def test_empty(self, device):
+        """Test with empty tensor"""
+        indices = torch.tensor([], device=device, dtype=torch.long)
+        offsets = batch_indices_to_offsets(indices)
+        assert torch.equal(offsets, torch.zeros(1, device=indices.device, dtype=torch.long))
 
 
 @pytest.mark.cpu_and_cuda
