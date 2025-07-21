@@ -21,6 +21,7 @@ tests = [
     "pytest",
     "pytest-env",
     "hypothesis",
+    "pytest-cov",
 ]
 minkowskiengine = ["minkowskiengine"]
 spconv = ["cumm", "spconv"]
@@ -39,4 +40,17 @@ filterwarnings = [
     "ignore:.*custom_[fb]wd.*:FutureWarning:spconv.pytorch.functional",  # spconv import
     "ignore:.*Importing from timm\\.models\\.layers.*:FutureWarning:timm.models.layers", 
     "ignore:.*locale.getdefaultlocale.*:DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["pytorch_sparse_utils"]
+parallel = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
 ]
