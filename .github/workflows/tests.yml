@@ -44,6 +44,7 @@ jobs:
       run: |
         coverage xml
         coverage html
+        coverage report
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5

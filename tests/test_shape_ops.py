@@ -97,7 +97,7 @@ class TestSparseReshape:
         """Test invalid dims"""
         tensor = sparse_1d1d_tensor(device)
         with pytest.raises(
-            (torch.jit.Error, ValueError),  # pyright: ignore[reportArgumentType]
+            (torch.jit.Error, RuntimeError),  # pyright: ignore[reportArgumentType]
             match=f"Invalid {kind} shape dimension",
         ):
             sparse_reshape(tensor, **kwarg)
@@ -115,7 +115,7 @@ class TestSparseReshape:
         """Test trying to infer more than one dim"""
         tensor = sparse_1d1d_tensor(device)
         with pytest.raises(
-            (torch.jit.Error, ValueError),  # pyright: ignore[reportArgumentType]
+            (torch.jit.Error, RuntimeError),  # pyright: ignore[reportArgumentType]
             match="Only one dimension can be inferred",
         ):
             sparse_reshape(tensor, **kwarg)
