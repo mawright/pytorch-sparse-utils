@@ -22,11 +22,23 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     
+    - name: Install MinkowskiEngine build dependencies
+      run:
+        sudo apt-get update
+        sudo apt-get install -y libopenblas-dev g++ cmake ninja-build
+    
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[tests,spconv]"
-        pip install MinkowskiEngine
+    
+    - name: Build and install MinkowskiEngine
+      run: |
+        git clone https://github.com/NVIDIA/MinkowskiEngine.git
+        cd MinkowskiEngine
+
+        pip install -r requirements.txt
+        python setup.py install --blas=openblas --cpu_only 
     
     - name: Run tests with TorchScript enabled
       run: |
