@@ -23,8 +23,8 @@ tests = [
     "hypothesis",
     "pytest-cov",
 ]
-minkowskiengine = ["minkowskiengine"]
-spconv = ["cumm", "spconv"]
+minkowskiengine = ["MinkowskiEngine"]
+spconv = ["spconv"]
 docs = ["mkdocs", "mkdocstrings", "mkdocstrings-python"]
 
 [tool.pytest.ini_options]
@@ -53,4 +53,5 @@ exclude_lines = [
     "raise AssertionError",
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
 ]
