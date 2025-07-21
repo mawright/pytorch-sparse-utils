@@ -133,8 +133,8 @@ class TestPydataSparseToTorchSparse:
 
 
 @pytest.mark.skipif(not has_minkowskiengine, reason="MinkowskiEngine not installed")
-class TestMinkowskiEngineReal:
-    def test_torch_sparse_to_minkowski_real(self):
+class TestMinkowskiEngine:
+    def test_torch_sparse_to_minkowski(self):
         # Create sparse tensor with 3D coordinates (batch, x, y) and features
         indices = torch.tensor(
             [[0, 0, 1, 1], [0, 1, 0, 1], [0, 0, 1, 1], [3, 4, 5, 6]], dtype=torch.int
@@ -145,12 +145,11 @@ class TestMinkowskiEngineReal:
 
         result = torch_sparse_to_minkowski(tensor)
 
-        assert hasattr(result, "F")  # Features
-        assert hasattr(result, "C")  # Coordinates
+        assert isinstance(result, ME.SparseTensor)
         assert result.F.shape[0] == 4  # Number of points
         assert result.F.shape[1] == 1  # Feature dimension
 
-    def test_minkowski_to_torch_sparse_real(self):
+    def test_minkowski_to_torch_sparse(self):
         # Create a MinkowskiEngine SparseTensor
         coordinates = torch.tensor(
             [[0, 0, 0], [0, 1, 0], [1, 0, 1], [1, 1, 1]], dtype=torch.int
@@ -164,23 +163,53 @@ class TestMinkowskiEngineReal:
         assert result.is_sparse
         assert result.values().numel() == 4
 
+    def test_already_torch_sparse(self):
+        indices = torch.tensor(
+            [[0, 0, 1, 1], [0, 1, 0, 1], [0, 0, 1, 1], [3, 4, 5, 6]], dtype=torch.int
+        )
+        values = torch.tensor([1.0, 2.0, 3.0, 4.0])
+        shape = (2, 2, 2, 10)  # batch_size=2, spatial=(2,2), features=10
+        tensor = torch.sparse_coo_tensor(indices, values, shape).coalesce()
+
+        result = minkowski_to_torch_sparse(tensor)
+
+        assert result is tensor
+
     def test_roundtrip_minkowski(self):
         # Test roundtrip conversion
-        indices = torch.tensor(
-            [[0, 0, 1], [0, 1, 0], [0, 1, 1], [2, 3, 4]], dtype=torch.int
-        )
+        indices = torch.tensor([[0, 0, 1], [0, 1, 0], [1, 1, 1]], dtype=torch.int).T
         values = torch.tensor([1.0, 2.0, 3.0])
-        shape = (2, 2, 2, 5)
+        shape = (2, 2, 2)
         tensor = torch.sparse_coo_tensor(indices, values, shape).coalesce()
 
         me_tensor = torch_sparse_to_minkowski(tensor)
         back_to_torch = minkowski_to_torch_sparse(
-            me_tensor, full_scale_spatial_shape=[2, 2]
+            me_tensor, full_scale_spatial_shape=[2, 2], squeeze=True
         )
 
-        # Check that we get back similar structure (may not be identical due to coordinate handling)
         assert back_to_torch.is_sparse
-        assert back_to_torch.shape[0] == 2  # batch size preserved
+        assert back_to_torch.shape[0] == 2
+        assert torch.equal(back_to_torch.indices(), tensor.indices())
+        assert torch.equal(back_to_torch.values(), tensor.values())
+
+        # Test with tensor spatial shape
+        back_to_torch_2 = minkowski_to_torch_sparse(
+            me_tensor, full_scale_spatial_shape=torch.tensor([2, 2]), squeeze=True
+        )
+
+        assert torch.equal(back_to_torch.indices(), back_to_torch_2.indices())
+        assert torch.equal(back_to_torch.values(), back_to_torch_2.values())
+
+    def test_squeeze_error(self):
+        # Test trying to squeeze without scalar features
+        coordinates = torch.tensor(
+            [[0, 0, 0], [0, 1, 0], [1, 0, 1], [1, 1, 1]], dtype=torch.int
+        )
+        features = torch.tensor([[1.0, 1.0], [2.0, 2.0], [3.0, 3.0], [4.0, 4.0]])
+        sparse_tensor = ME.SparseTensor(features, coordinates)
+
+        with pytest.raises(ValueError, match="Got `squeeze`=True"):
+            _ = minkowski_to_torch_sparse(sparse_tensor, squeeze=True)
 
 
 @pytest.mark.skipif(not has_spconv, reason="spconv not installed")
@@ -243,7 +272,6 @@ class TestSpconv:
 
         with pytest.raises(ValueError, match="Got `squeeze`=True, but"):
             _ = spconv_to_torch_sparse(sparse_conv_tensor, squeeze=True)
-
 
     def test_roundtrip_spconv(self):
         # Test roundtrip conversion

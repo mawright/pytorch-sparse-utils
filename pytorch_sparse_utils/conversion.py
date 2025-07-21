@@ -63,11 +63,9 @@ def torch_sparse_to_minkowski(tensor: Tensor):
     assert isinstance(tensor, Tensor)
     assert tensor.is_sparse
     features = tensor.values()
-    coordinates = tensor.indices()
     if features.ndim == 1:
         features = features.unsqueeze(-1)
-        coordinates = coordinates[:-1]
-    coordinates = coordinates.transpose(0, 1).contiguous().int()
+    coordinates = tensor.indices().T.int().contiguous()
     return ME.SparseTensor(
         features, coordinates, requires_grad=tensor.requires_grad, device=tensor.device
     )
@@ -77,11 +75,21 @@ def torch_sparse_to_minkowski(tensor: Tensor):
 def minkowski_to_torch_sparse(
     tensor: Union[Tensor, ME.SparseTensor],
     full_scale_spatial_shape: Optional[Union[Tensor, list[int]]] = None,
+    squeeze: bool = False
 ) -> Tensor:
     """Converts a MinkowskiEngine SparseTensor to an equivalent sparse torch.Tensor
 
     Args:
         tensor (MinkowskiEngine.SparseTensor): Sparse tensor to be converted
+        full_scale_spatial_shape (Optional[Union[list[int], [Tensor]]]): The full
+            extent of the spatial domain on which the sparse data reside.
+            If given, will be used to define the size of the sparse tensor. If not
+            given, the size will be inferred from the indices in the tensor.
+            Default: None
+        squeeze (bool): If True and the feature dimension of the MinkowskiEngine
+            SparseTensor is 1, the returned sparse torch.Tensor will have its values
+            squeezed to 1D shape of [nnz] rather than [nnz, 1]. Raises an error if
+            True and the feature dimension is not 1.
 
     Returns:
         tensor (torch.Tensor): Converted sparse tensor
@@ -102,6 +110,18 @@ def minkowski_to_torch_sparse(
     else:
         max_coords = None
     out = __me_sparse(tensor, min_coords, max_coords)[0].coalesce()
+    if squeeze:
+        if out.values().shape[1] != 1:
+            raise ValueError(
+                "Got `squeeze`=True, but the MinkowskiEngine tensor has a feature "
+                f"dim of {out.values().shape[1]}, not 1."
+            )
+        out = torch.sparse_coo_tensor(
+            out.indices(),
+            out.values().squeeze(-1),
+            out.shape[:-1],
+            is_coalesced=out.is_coalesced()
+        )
     return out
 
 
