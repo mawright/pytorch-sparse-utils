@@ -4,8 +4,8 @@ import sparse
 import torch
 from torch import Tensor
 
-from . import imports
-from .imports import ME, spconv
+from pytorch_sparse_utils import imports
+from pytorch_sparse_utils.imports import ME, spconv
 
 
 def torch_sparse_to_pydata_sparse(tensor: Tensor) -> sparse.COO:
@@ -22,8 +22,8 @@ def torch_sparse_to_pydata_sparse(tensor: Tensor) -> sparse.COO:
     assert tensor.is_coalesced
     nonzero_values = tensor.values().nonzero(as_tuple=True)
     return sparse.COO(
-        tensor.indices()[:, nonzero_values[0]],
-        tensor.values()[nonzero_values],
+        tensor.indices()[:, nonzero_values[0]].numpy(),
+        tensor.values()[nonzero_values].numpy(),
         tensor.shape,
         has_duplicates=False,
     )
@@ -123,8 +123,9 @@ def torch_sparse_to_spconv(tensor: torch.Tensor):
     indices_th = tensor.indices()
     features_th = tensor.values()
     if features_th.ndim == 1:
+        # Tensor has scalar features, but spconv always expects 2D feature tensor
         features_th = features_th.unsqueeze(-1)
-        indices_th = indices_th[:-1]
+        spatial_shape = spatial_shape + [tensor.shape[-1]]
     indices_th = indices_th.permute(1, 0).contiguous().int()
     return spconv.SparseConvTensor(features_th, indices_th, spatial_shape, batch_size)
 
