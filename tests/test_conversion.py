@@ -199,7 +199,7 @@ class TestSpconv:
         assert result.batch_size == 2
 
     def test_spconv_to_torch_sparse(self):
-        # Create a real SparseConvTensor
+        # Create a SparseConvTensor
         features = torch.tensor([[1.0], [2.0], [3.0], [4.0]])
         indices = torch.tensor(
             [[0, 0, 1, 1], [0, 1, 0, 1], [0, 1, 0, 1]], dtype=torch.int
@@ -217,7 +217,7 @@ class TestSpconv:
         assert result.shape == (2, 2, 2, 1)  # (batch, h, w, features)
 
     def test_spconv_squeeze(self):
-        # Test squeeze functionality with real spconv
+        # Test squeeze functionality real spconv
         features = torch.tensor([[1.0], [2.0], [3.0]])
         indices = torch.tensor([[0, 0, 1], [0, 1, 0], [0, 1, 1]], dtype=torch.int).T
         spatial_shape = [2, 2]
@@ -230,6 +230,20 @@ class TestSpconv:
 
         assert result.shape == (2, 2, 2)  # Feature dimension squeezed
         assert result.values().shape == (3,)  # Values are 1D
+
+    def test_spconv_squeeze_error(self):
+        # Test squeeze functionality real spconv
+        features = torch.tensor([[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]])
+        indices = torch.tensor([[0, 0, 1], [0, 1, 0], [0, 1, 1]], dtype=torch.int).T
+        spatial_shape = [2, 2]
+        batch_size = 2
+        sparse_conv_tensor = spconv.SparseConvTensor(
+            features, indices, spatial_shape, batch_size
+        )
+
+        with pytest.raises(ValueError, match="Got `squeeze`=True, but"):
+            result = spconv_to_torch_sparse(sparse_conv_tensor, squeeze=True)
+
 
     def test_roundtrip_spconv(self):
         # Test roundtrip conversion
@@ -245,6 +259,31 @@ class TestSpconv:
         assert back_to_torch.shape == shape
         assert torch.equal(tensor.indices(), back_to_torch.indices())
         assert torch.equal(tensor.values(), back_to_torch.values())
+
+    def test_already_spconv(self):
+        #  Test no-op
+        features = torch.tensor([[1.0], [2.0], [3.0]])
+        indices = torch.tensor([[0, 0, 1], [0, 1, 0], [0, 1, 1]], dtype=torch.int).T
+        spatial_shape = [2, 2]
+        batch_size = 2
+        sparse_conv_tensor = spconv.SparseConvTensor(
+            features, indices, spatial_shape, batch_size
+        )
+
+        result = torch_sparse_to_spconv(
+            sparse_conv_tensor  # pyright: ignore[reportArgumentType]
+        )
+        assert result is sparse_conv_tensor
+
+    def test_already_torch_sparse(self):
+        # Test no-op (already torch sparse)
+        indices = torch.tensor([[0, 0, 1], [0, 1, 0], [0, 1, 1], [0, 0, 1]]).T
+        values = torch.tensor([1.0, 2.0, 3.0, 4.0])
+        shape = (2, 2, 2)
+        tensor = torch.sparse_coo_tensor(indices, values, shape).coalesce()
+
+        result = spconv_to_torch_sparse(tensor)
+        assert result is tensor
 
 
 # Integration tests for round-trip conversions
