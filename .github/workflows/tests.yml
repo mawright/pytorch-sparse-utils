@@ -41,13 +41,13 @@ jobs:
     
     - name: Run tests with TorchScript enabled
       run: |
-        pytest -v --cov=pytorch_sparse_utils
+        pytest -v --cov=pytorch_sparse_utils  --ignore=MinkowskiEngine/
       env:
         CUDA_VISIBLE_DEVICES: ""  # CPU only for standard CI
 
     - name: Run tests with TorchScript disabled
       run: |
-        pytest -v --cov=pytorch_sparse_utils --cov-append
+        pytest -v --cov=pytorch_sparse_utils --cov-append  --ignore=MinkowskiEngine/
       env:
         CUDA_VISIBLE_DEVICES: ""
         PYTORCH_JIT: "0"
