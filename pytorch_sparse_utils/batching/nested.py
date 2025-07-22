@@ -5,13 +5,17 @@ import torch
 from torch import Tensor
 
 
-def concatted_to_nested_tensor(tensor: Tensor, batch_offsets: Tensor) -> Tensor:
+def concatted_to_nested_tensor(
+    tensor: Tensor, batch_offsets: Tensor
+) -> Tensor:  # pragma: no cover
     assert batch_offsets.ndim == 1
     split_tensor = split_batch_concatenated_tensor(tensor, batch_offsets)
     return torch.nested.as_nested_tensor(list(*split_tensor))
 
 
-def flatten_multi_level_sparse_maps_to_nested(tensors: list[Tensor]):
+def flatten_multi_level_sparse_maps_to_nested(
+    tensors: list[Tensor],
+):  # pragma: no cover
     # tensors is a list of pytorch sparse tensors of dimension batch x height x width x channel
     assert all(isinstance(tensor, Tensor) for tensor in tensors)
     assert all(tensor.is_sparse for tensor in tensors)
@@ -65,7 +69,7 @@ def nested_flattened_tensors_to_sparse_tensors(
     levels: Tensor,
     indices: Tensor,
     level_spatial_shapes: list[list[int]],
-):
+):  # pragma: no cover
     all_levels = torch.unique(torch.cat([torch.unique(lev) for lev in levels]))
     batch_size = features.size(0)
     assert levels.size(0) == indices.size(0) == batch_size
