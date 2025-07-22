@@ -521,6 +521,14 @@ def padded_to_concatenated(
         )
         return out, batch_offsets
 
+    if padding_mask is not None:
+        if padding_mask.ndim != 2:
+            raise ValueError(f"Expected padding_mask to be 2D, got {padding_mask.ndim}")
+        if padding_mask.shape[0] != batch_size:
+            raise ValueError("Batch size mismatch between tensor and padding_mask")
+        if padding_mask.shape[1] != max_len:
+            raise ValueError("Sequence length mismatch between tensor and padding_mask")
+
     # Early return for no padding: All sequences are same length so can just reshape it
     if padding_mask is None or not padding_mask.any():
         total_len = batch_size * max_len
@@ -529,13 +537,6 @@ def padded_to_concatenated(
         batch_offsets = torch.arange(0, total_len + 1, max_len, device=tensor.device)
 
         return out, batch_offsets
-
-    if padding_mask.ndim != 2:
-        raise ValueError(f"Expected padding_mask to be 2D, got {padding_mask.ndim}")
-    if padding_mask.shape[0] != batch_size:
-        raise ValueError("Batch size mismatch between tensor and padding_mask")
-    if padding_mask.shape[1] != max_len:
-        raise ValueError("Sequence length mismatch between tensor and padding_mask")
 
     nonpad_mask = padding_mask.logical_not()
     seq_lens = nonpad_mask.sum(-1).to(torch.long)

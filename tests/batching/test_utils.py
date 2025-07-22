@@ -20,6 +20,7 @@ from pytorch_sparse_utils.batching.batch_utils import (
     split_batch_concatenated_tensor,
 )
 from pytorch_sparse_utils.validation import validate_atleast_nd
+from .. import random_sparse_tensor
 
 
 @pytest.fixture
@@ -504,6 +505,14 @@ class TestPaddedToConcatenated:
         assert torch.equal(result, expected_result)
         assert torch.equal(batch_offsets, expected_batch_offsets)
 
+    def test_empty_tensor(self, device):
+        tensor = torch.randn(0, 10, 32, device=device)
+        result, batch_offsets = padded_to_concatenated(tensor)
+
+        assert result.numel() == 0
+        assert result.shape == (0, 32)
+        assert torch.equal(batch_offsets, torch.tensor([0], device=device))
+
     def test_error_handling(self, device):
         """Test error handling."""
         # Test with tensor with less than 3 dimensions
@@ -522,6 +531,26 @@ class TestPaddedToConcatenated:
             (ValueError, torch.jit.Error), match="Batch size mismatch"  # type: ignore
         ):
             padded_to_concatenated(tensor, padding_mask_wrong_batch)
+
+        # Wrong padding mask dim
+        padding_mask_3d = torch.zeros(3, 4, 5, device=device, dtype=torch.bool)
+        padding_mask_3d[0, -1] = True
+        with pytest.raises(
+            (ValueError, torch.jit.Error),  # pyright: ignore[reportArgumentType]
+            match="Expected padding_mask to be 2D",
+        ):
+            padded_to_concatenated(tensor, padding_mask_3d)
+
+        # Sequence length mismatch
+        padding_mask_wrong_seq_length = torch.zeros(
+            3, 5, device=device, dtype=torch.bool
+        )
+        padding_mask_wrong_seq_length[0, -1] = True
+        with pytest.raises(
+            (ValueError, torch.jit.Error),  # pyright: ignore[reportArgumentType]
+            match="Sequence length mismatch",
+        ):
+            padded_to_concatenated(tensor, padding_mask_wrong_seq_length)
 
 
 @pytest.mark.cpu_and_cuda
@@ -739,3 +768,25 @@ class TestSparseTensorToConcatenated:
             match="Received non-sparse tensor",
         ):
             sparse_tensor_to_concatenated(tensor)
+
+
+class TestConcatenatedToSparseTensor:
+    def test_basic_functionality(self, device):
+        """Test basic functions"""
+        sparse_tensor = random_sparse_tensor([4, 5, 5], [8], 0.5, seed=0, device=device)
+
+        values, indices, batch_offsets = sparse_tensor_to_concatenated(sparse_tensor)
+
+        out = concatenated_to_sparse_tensor(values, indices, sparse_tensor.shape)
+
+        assert isinstance(out, Tensor)
+        assert out.is_sparse
+
+        assert torch.equal(sparse_tensor.indices(), out.indices())
+        assert torch.equal(sparse_tensor.values(), out.values())
+        assert sparse_tensor.shape == out.shape
+
+        # Test without shape param
+        out_2 = concatenated_to_sparse_tensor(values, indices)
+        assert torch.equal(sparse_tensor.indices(), out_2.indices())
+        assert torch.equal(sparse_tensor.values(), out_2.values())
