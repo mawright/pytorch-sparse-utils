@@ -399,7 +399,7 @@ def concatenated_to_padded(
         >>> padded.shape
         torch.Size([3, 4, 3, 4])  # 3 batches, max length 4, 3x4 features
     """
-    validate_atleast_nd(tensor, 2)
+    validate_atleast_nd(tensor, 1)
     if not batch_offsets.ndim == 1:
         raise ValueError(f"Expected batch_offsets to be 1D, got {batch_offsets.ndim}")
 
@@ -418,9 +418,7 @@ def concatenated_to_padded(
 
     # Fast path: If all sequences are equal length can just return a view
     if torch.all(seq_lens == max_len):
-        if not tensor.is_contiguous():
-            tensor = tensor.contiguous()
-        out = tensor.view(out_shape)
+        out = tensor.reshape(out_shape)
         padding_mask = torch.zeros(
             batch_size, max_len, device=tensor.device, dtype=torch.bool
         )
@@ -511,7 +509,7 @@ def padded_to_concatenated(
         >>> offsets
         tensor([0, 0, 1])
     """
-    validate_atleast_nd(tensor, 3)
+    validate_atleast_nd(tensor, 2)
     batch_size, max_len = tensor.shape[:2]
     feature_dims = tensor.shape[2:]
 
@@ -656,7 +654,7 @@ def batch_offsets_from_sparse_tensor_indices(indices_tensor: Tensor) -> Tensor:
     """
     assert not torch.is_floating_point(indices_tensor)
 
-    if indices_tensor.shape[1] == 0:  # empty case
+    if indices_tensor.numel() == 0:  # empty case
         return torch.zeros(1, device=indices_tensor.device, dtype=indices_tensor.dtype)
 
     batch_indices = indices_tensor[0]

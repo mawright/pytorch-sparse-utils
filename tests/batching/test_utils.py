@@ -3,17 +3,21 @@ import torch
 from torch import Tensor
 
 from pytorch_sparse_utils.batching.batch_utils import (
-    split_batch_concatenated_tensor,
-    normalize_batch_offsets,
-    seq_lengths_to_batch_offsets,
-    batch_offsets_to_seq_lengths,
-    batch_offsets_to_indices,
-    batch_indices_to_offsets,
-    seq_lengths_to_indices,
-    concatenated_to_padded,
-    padded_to_concatenated,
     batch_dim_to_leading_index,
+    batch_indices_to_offsets,
     batch_offsets_from_sparse_tensor_indices,
+    batch_offsets_to_indices,
+    batch_offsets_to_seq_lengths,
+    concatenated_to_padded,
+    concatenated_to_sparse_tensor,
+    normalize_batch_offsets,
+    padded_to_concatenated,
+    padded_to_sparse_tensor,
+    seq_lengths_to_batch_offsets,
+    seq_lengths_to_indices,
+    sparse_tensor_to_concatenated,
+    sparse_tensor_to_padded,
+    split_batch_concatenated_tensor,
 )
 from pytorch_sparse_utils.validation import validate_atleast_nd
 
@@ -54,6 +58,26 @@ class TestNormalizeBatchOffsets:
         result = normalize_batch_offsets(batch_offsets, total_length)
         assert result.dtype == batch_offsets.dtype
 
+    def test_float_dtype_error(self, device):
+        """Test with non-integer dtype."""
+        batch_offsets = torch.tensor([0, 5, 8], dtype=torch.float, device=device)
+        total_length = 10
+        with pytest.raises(
+            (ValueError, torch.jit.Error),  # pyright: ignore[reportArgumentType]
+            match="Expected integer tensor",
+        ):
+            _ = normalize_batch_offsets(batch_offsets, total_length)
+
+    def test_total_length_error(self, device):
+        """Test with total_length too small."""
+        batch_offsets = torch.tensor([0, 5, 8], device=device)
+        total_length = 6
+        with pytest.raises(
+            (ValueError, torch.jit.Error),  # pyright: ignore[reportArgumentType]
+            match="Max value of batch_offsets",
+        ):
+            _ = normalize_batch_offsets(batch_offsets, total_length)
+
     def test_list(self):
         """Test with list input"""
         batch_offsets = [5, 8]
@@ -63,6 +87,23 @@ class TestNormalizeBatchOffsets:
         assert len(result) == len(expected)
         assert isinstance(result, type(expected))
         assert all(result[i] == expected[i] for i in range(len(expected)))
+
+    def test_list_already_normalized(self):
+        """Test with already-normalized list"""
+        batch_offsets = [0, 5, 8, 10]
+        total_length = 10
+        result = normalize_batch_offsets(batch_offsets, total_length)
+        assert result == batch_offsets
+
+    def test_list_total_length_error(self):
+        """Test list with bad total_length"""
+        batch_offsets = [0, 5, 8, 10]
+        total_length = 6
+        with pytest.raises(
+            (ValueError, torch.jit.Error),  # pyright: ignore[reportArgumentType]
+            match="Max value of batch_offsets",
+        ):
+            _ = normalize_batch_offsets(batch_offsets, total_length)
 
 
 @pytest.mark.cpu_and_cuda
@@ -192,6 +233,14 @@ class TestBatchOffsetsToIndices:
         expected = torch.tensor([0, 0, 0, 1, 1, 1, 1, 2, 2, 2], device=device)
         assert torch.equal(result, expected)
 
+    def test_list_input(self, device):
+        """Test with list batch offsets"""
+        batch_offsets = [0, 3, 7, 10]
+        result = batch_offsets_to_indices(batch_offsets, device=device)
+        expected = torch.tensor([0, 0, 0, 1, 1, 1, 1, 2, 2, 2], device=device)
+        assert torch.equal(result, expected)
+
+
 @pytest.mark.cpu_and_cuda
 class TestBatchIndicesToOffsets:
     def test_basic_functionality(self, device):
@@ -205,7 +254,9 @@ class TestBatchIndicesToOffsets:
         """Test with empty tensor"""
         indices = torch.tensor([], device=device, dtype=torch.long)
         offsets = batch_indices_to_offsets(indices)
-        assert torch.equal(offsets, torch.zeros(1, device=indices.device, dtype=torch.long))
+        assert torch.equal(
+            offsets, torch.zeros(1, device=indices.device, dtype=torch.long)
+        )
 
 
 @pytest.mark.cpu_and_cuda
@@ -247,7 +298,7 @@ class TestSplitBatchConcattedTensor:
 
 
 @pytest.mark.cpu_and_cuda
-class TestDeconcatAddBatchDim:
+class TestConcatenatedToPadded:
     def test_basic_functionality(self, device):
         """Test basic functionality."""
         tensor = torch.tensor(
@@ -303,28 +354,56 @@ class TestDeconcatAddBatchDim:
 
         batch_offsets = torch.tensor([0, 1, 4], device=device)
 
-        result, padding_mask = concatenated_to_padded(
-            tensor, batch_offsets, pad_value=-1.0
-        )
+        result, _ = concatenated_to_padded(tensor, batch_offsets, pad_value=-1.0)
 
         # Check padded values have custom pad value
         assert torch.all(result[0, 1:3] == -1.0)
 
+    def test_scalar_feature(self, device):
+        """Test with a 1D tensor (scalar feature)"""
+        tensor = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0], device=device)
+        batch_offsets = torch.tensor([0, 1, 3, 4, 5], device=device)
+
+        result, pad_mask = concatenated_to_padded(tensor, batch_offsets)
+
+        assert result.shape == (4, 2)
+
+        expected_result = torch.tensor(
+            [[1.0, 0.0], [2.0, 3.0], [4.0, 0.0], [5.0, 0.0]], device=device
+        )
+        expected_mask = torch.tensor(
+            [[False, True], [False, False], [False, True], [False, True]], device=device
+        )
+
+        assert torch.equal(result, expected_result)
+        assert torch.equal(pad_mask, expected_mask)
+
     def test_error_handling(self, device):
         """Test error handling."""
-        # Test with 1D tensor (less than 2 dims)
-        tensor_1d = torch.tensor([1.0, 2.0, 3.0], device=device)
-        batch_offsets = torch.tensor([0, 3], device=device)
+        # Test with scalar tensor
+        tensor_1d = torch.tensor(1.0, device=device)
+        batch_offsets = torch.tensor([0, 1], device=device)
 
         with pytest.raises(
             (ValueError, torch.jit.Error),  # type: ignore
-            match="Expected tensor to have at least 2 dimensions",
+            match="Expected tensor to have at least 1",
         ):
             concatenated_to_padded(tensor_1d, batch_offsets)
 
+        # Test with bad batch_offsets
+        tensor = torch.tensor(
+            [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]], device=device
+        )
+        batch_offsets_2d = torch.tensor([[0, 3]], device=device)
+        with pytest.raises(
+            (ValueError, torch.jit.Error),  # pyright: ignore[reportArgumentType]
+            match="Expected batch_offsets to be 1D",
+        ):
+            _ = concatenated_to_padded(tensor, batch_offsets_2d)
+
 
 @pytest.mark.cpu_and_cuda
-class TestRemoveBatchDimAndConcat:
+class TestPaddedToConcatenated:
     def test_basic_functionality(self, device):
         """Test basic functionality."""
         # Create a batched tensor with padding
@@ -407,15 +486,33 @@ class TestRemoveBatchDimAndConcat:
         expected_offsets = torch.tensor([0, 3, 3, 5], device=device)
         assert torch.equal(batch_offsets, expected_offsets)
 
+    def test_scalar_feature(self, device):
+        """Test with a 2D tensor of shape [batch, seq_len] and scalar feature"""
+        # Create padded tensor
+        tensor = torch.tensor([[1.0, 2.0, 3.0], [4.0, 0.0, 0.0]], device=device)
+        pad_mask = torch.tensor(
+            [[False, False, False], [False, True, True]], device=device
+        )
+
+        result, batch_offsets = padded_to_concatenated(tensor, pad_mask)
+
+        assert result.shape == (4,)
+
+        expected_result = torch.tensor([1.0, 2.0, 3.0, 4.0], device=device)
+        expected_batch_offsets = torch.tensor([0, 3, 4], device=device)
+
+        assert torch.equal(result, expected_result)
+        assert torch.equal(batch_offsets, expected_batch_offsets)
+
     def test_error_handling(self, device):
         """Test error handling."""
         # Test with tensor with less than 3 dimensions
-        tensor_2d = torch.rand(3, 4, device=device)
+        tensor_1d = torch.rand(3, device=device)
         with pytest.raises(
             (ValueError, torch.jit.Error),  # type: ignore
-            match="Expected tensor to have at least 3 dimensions",
+            match="Expected tensor to have at least 2 dimensions",
         ):
-            padded_to_concatenated(tensor_2d)
+            padded_to_concatenated(tensor_1d)
 
         # Test with mismatched padding mask dimensions
         tensor = torch.rand(3, 4, 2, device=device)
@@ -457,7 +554,7 @@ class TestBatchOffsetsFromSparseTensorIndices:
         """Test basic functionality."""
         # Create indices for a sparse tensor with batch dimension first
         indices = torch.tensor(
-            [[0, 0, 1, 1, 2, 2], [0, 1, 0, 2, 1, 3]],  # Batch indices  # Other indices
+            [[0, 0, 1, 1, 2, 2], [0, 1, 0, 2, 1, 3]],
             device=device,
         )
 
@@ -483,3 +580,162 @@ class TestBatchOffsetsFromSparseTensorIndices:
         # Each element is the first occurrence of that batch index
         expected = torch.tensor([0, 2, 2, 4, 5], device=device)
         assert torch.equal(result, expected)
+
+    def test_empty_indices_tensor(self, device):
+        indices = torch.zeros([0, 2], device=device, dtype=torch.long)
+
+        expected = torch.zeros(1, device=device, dtype=torch.long)
+        result = batch_offsets_from_sparse_tensor_indices(indices)
+
+        assert torch.equal(expected, result)
+
+
+@pytest.mark.cpu_and_cuda
+class TestSparseTensorToPadded:
+    def test_basic_functionality(self, device):
+        """Test basic functions"""
+        indices = torch.tensor([[0, 0], [0, 1], [1, 0], [1, 2]], device=device).T
+        values = torch.tensor([1.0, 2.0, 3.0, 4.0], device=device)
+        tensor = torch.sparse_coo_tensor(
+            indices, values, (2, 3), device=device
+        ).coalesce()
+
+        padded_values, padded_indices, pad_mask = sparse_tensor_to_padded(tensor)
+
+        assert padded_values.shape == (2, 2)
+        assert padded_indices.shape == (2, 2, 2)
+        assert pad_mask.shape == (2, 2)
+
+        expected_values = torch.tensor([[1.0, 2.0], [3.0, 4.0]], device=device)
+        expected_indices = indices.T.reshape(2, 2, 2)
+        assert torch.equal(padded_values, expected_values)
+        assert torch.equal(padded_indices, expected_indices)
+
+        assert torch.equal(pad_mask, torch.zeros_like(pad_mask))
+
+    def test_uneven_batches(self, device):
+        """Test with uneven batch sizes anbd padding"""
+        indices = torch.tensor([[0, 0], [0, 1], [0, 2], [1, 0]], device=device).T
+        values = torch.tensor([1.0, 2.0, 3.0, 4.0], device=device)
+        tensor = torch.sparse_coo_tensor(
+            indices, values, (2, 3), device=device
+        ).coalesce()
+
+        padded_values, padded_indices, pad_mask = sparse_tensor_to_padded(tensor)
+
+        assert padded_values.shape == (2, 3)  # 2 batches, max 3 elements
+        assert padded_indices.shape == (2, 3, 2)
+        assert pad_mask.shape == (2, 3)
+
+        assert torch.equal(
+            padded_values[0], torch.tensor([1.0, 2.0, 3.0], device=device)
+        )
+        assert torch.equal(padded_values[1, 0], torch.tensor(4.0, device=device))
+
+        expected_indices = torch.zeros_like(padded_indices)
+        expected_indices[0] = expected_indices.new_tensor([[0, 0], [0, 1], [0, 2]])
+        expected_indices[1, 0] = expected_indices.new_tensor([1, 0])
+        assert torch.equal(padded_indices, expected_indices)
+
+        expected_mask = torch.tensor(
+            [[False, False, False], [False, True, True]], device=device
+        )
+        assert torch.equal(pad_mask, expected_mask)
+
+    def test_error_not_sparse(self, device):
+        """Test error when giving a non-sparse tensor"""
+        tensor = torch.randn(2, 2, device=device)
+        with pytest.raises(
+            (ValueError, torch.jit.Error),  # pyright: ignore[reportArgumentType]
+            match="Received non-sparse tensor",
+        ):
+            sparse_tensor_to_padded(tensor)
+
+
+class TestPaddedToSparseTensor:
+    def test_basic_functionality(self, device):
+        """Test basic functions"""
+        padded_values = torch.tensor([[1.0, 2.0], [3.0, 4.0]], device=device)
+        padded_indices = torch.tensor(
+            [[[0, 0], [0, 1]], [[1, 0], [1, 2]]], device=device
+        )
+        pad_mask = torch.zeros(2, 2, dtype=torch.bool, device=device)
+
+        tensor = padded_to_sparse_tensor(
+            padded_values, padded_indices, pad_mask, [2, 3]
+        )
+
+        assert tensor.is_sparse
+        assert tensor.shape == (2, 3)
+
+        expected_indices = padded_indices.reshape(-1, 2).T
+        expected_values = padded_values.reshape(-1)
+
+        assert torch.equal(tensor.indices(), expected_indices)
+        assert torch.equal(tensor.values(), expected_values)
+
+        # Test without shape param
+        tensor_2 = padded_to_sparse_tensor(padded_values, padded_indices, pad_mask)
+
+        # Should be same as other tensor
+        assert tensor.shape == tensor_2.shape
+        assert torch.equal(tensor.indices(), tensor_2.indices())
+        assert torch.equal(tensor.values(), tensor_2.values())
+
+
+@pytest.mark.cpu_and_cuda
+class TestSparseTensorToConcatenated:
+    def test_basic_functionality(self, device):
+        """Test basic functions"""
+        indices = torch.tensor([[0, 0], [0, 1], [1, 0], [1, 2]], device=device).T
+        values = torch.tensor([1.0, 2.0, 3.0, 4.0], device=device)
+        tensor = torch.sparse_coo_tensor(
+            indices, values, (2, 3), device=device
+        ).coalesce()
+
+        concat_values, concat_indices, batch_offsets = sparse_tensor_to_concatenated(
+            tensor
+        )
+
+        assert concat_values.shape == (4,)
+        assert concat_indices.shape == (4, 2)
+
+        expected_values = torch.tensor([1.0, 2.0, 3.0, 4.0], device=device)
+        expected_indices = indices.T
+        assert torch.equal(concat_values, expected_values)
+        assert torch.equal(concat_indices, expected_indices)
+
+        assert torch.equal(batch_offsets, torch.tensor([0, 2, 4], device=device))
+
+    def test_uneven_batches(self, device):
+        """Test with uneven batch sizes anbd padding"""
+        indices = torch.tensor([[0, 0], [0, 1], [0, 2], [1, 0]], device=device).T
+        values = torch.tensor([1.0, 2.0, 3.0, 4.0], device=device)
+        tensor = torch.sparse_coo_tensor(
+            indices, values, (2, 3), device=device
+        ).coalesce()
+
+        concat_values, concat_indices, batch_offsets = sparse_tensor_to_concatenated(
+            tensor
+        )
+
+        assert concat_values.shape == (4,)
+        assert concat_indices.shape == (4, 2)
+
+        assert torch.equal(
+            concat_values, torch.tensor([1.0, 2.0, 3.0, 4.0], device=device)
+        )
+
+        expected_indices = torch.tensor([[0, 0], [0, 1], [0, 2], [1, 0]], device=device)
+        assert torch.equal(concat_indices, expected_indices)
+
+        assert torch.equal(batch_offsets, torch.tensor([0, 3, 4], device=device))
+
+    def test_error_not_sparse(self, device):
+        """Test error when giving a non-sparse tensor"""
+        tensor = torch.randn(2, 2, device=device)
+        with pytest.raises(
+            (ValueError, torch.jit.Error),  # pyright: ignore[reportArgumentType]
+            match="Received non-sparse tensor",
+        ):
+            sparse_tensor_to_concatenated(tensor)

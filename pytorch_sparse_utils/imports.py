@@ -8,7 +8,7 @@ try:
     from MinkowskiEngine.MinkowskiNonlinearity import MinkowskiNonlinearityBase
 
     has_minkowskiengine = True
-except ImportError:
+except ImportError:  # pragma: no cover
     class DummyME:
         SparseTensor = None
     ME = DummyME()
@@ -19,7 +19,7 @@ try:
     from spconv.pytorch import SparseConvTensor
 
     has_spconv = True
-except ImportError:
+except ImportError:  # pragma: no cover
     spconv = None
     SparseConvTensor = None
     has_spconv = False

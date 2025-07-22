@@ -54,5 +54,5 @@ exclude_lines = [
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
-    "if torch.jit.is_scriping():",
+    "if torch.jit.is_scripting():",
 ]

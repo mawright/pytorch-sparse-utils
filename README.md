@@ -7,7 +7,7 @@
 Low-level utilities for PyTorch sparse tensors and operations.
 
 ## Introduction
-PyTorch's implementation of sparse tensors is lacking full support for many common operations. This repository contains a set of utilities for making PyTorch sparse tensors into more usable general-purpose sparse data structures. 
+PyTorch's implementation of sparse tensors is lacking full support for many common operations. This repository contains a set of utilities for making PyTorch sparse tensors into more usable general-purpose sparse data structures, particularly in the context of modern neural network architectures like Transformer-based models.
 
 For example, while the basic operation `index_select` has a sparse forward implementation, using it as part of an autograd graph alongside direct manipulation of the sparse tensor's values is not supported:
 ```python
