@@ -3,6 +3,8 @@
 [![Tests](https://github.com/mawright/pytorch-sparse-utils/actions/workflows/tests.yml/badge.svg)](https://github.com/mawright/pytorch-sparse-utils/actions/workflows/tests.yml)
 [![Documentation Status](https://github.com/mawright/pytorch-sparse-utils/actions/workflows/docs.yml/badge.svg)](https://mawright.github.io/pytorch-sparse-utils/)
 [![License](https://img.shields.io/github/license/mawright/pytorch-sparse-utils)](https://github.com/mawright/pytorch-sparse-utils/blob/main/LICENSE)
+[![codecov](https://codecov.io/gh/mawright/pytorch-sparse-utils/branch/main/graph/badge.svg)](https://codecov.io/gh/mawright/pytorch-sparse-utils)
+![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)
 
 Low-level utilities for PyTorch sparse tensors and operations.
 
