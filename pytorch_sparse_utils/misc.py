@@ -1,6 +1,7 @@
 import math
 import re
 from typing import TYPE_CHECKING, overload
+import warnings
 
 import torch
 from torch import Tensor
@@ -95,9 +96,12 @@ def unpack_sparse_tensors(batch: dict[str, Tensor]) -> dict[str, Tensor]:
         sparse torch.Tensor format
     """
     if _pytorch_atleast_2_5:
-        raise DeprecationWarning(
-            "`unpack_sparse_tensors` is no longer needed as of Pytorch 2.5",
-            "which added native support for pinned_memory=True for sparse tensors",
+        warnings.warn(
+            (
+                "`unpack_sparse_tensors` is no longer needed as of Pytorch 2.5"
+                "which added native support for pinned_memory=True for sparse tensors"
+            ),
+            DeprecationWarning,
         )
     prefixes_indices = [
         match[0]
