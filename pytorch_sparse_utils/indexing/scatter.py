@@ -8,6 +8,61 @@ from .utils import (
 )
 
 
+# @torch.jit.script
+def _merge_sorted(
+    old_nd: Tensor,
+    new_nd: Tensor,
+    old_values: Tensor,
+    new_values: Tensor,
+    insertion_positions: Tensor,
+) -> tuple[Tensor, Tensor]:
+    """Merges two sorted sequences of sparse indices/values and return them in coalesced
+    order.
+
+    All input args must be on the same device.
+
+    Args:
+        old_nd (Tensor): [S x n_old] tensor of N-D indices
+        new_nd (Tensor): [S x n_new] tensor of N-D indices
+        old_values (Tensor): [n_old, ...] tensor of values
+        new_values (Tensor): [n_new, ...] tensor of values
+        insertion_positions (Tensor): [n_new] tensor of insertion positions in
+            old_linear for each element in new_linear
+
+    Returns:
+        merged_nd: [S, n_old+n_new]
+        merged_values: [n_old+n_new, ...]
+    """
+    device = old_nd.device
+    n_old, n_new = old_nd.size(1), new_nd.size(1)
+    n_total = n_old + n_new
+
+    # determine final positions of new values
+    # account for previous insertions to get final positions of new rows
+    new_positions = insertion_positions + torch.arange(
+        n_new, device=device, dtype=insertion_positions.dtype
+    )
+
+    # determine final positions of old values by counting how many new values are
+    # inserted before each old value
+    hist = torch.bincount(insertion_positions, minlength=n_old + 1)
+    old_shift = torch.cumsum(hist[:-1], 0)
+    old_positions = torch.arange(n_old, device=device) + old_shift
+
+    # allocate output tensors
+    merged_nd = old_nd.new_empty(old_nd.size(0), n_total)
+    merged_values = old_values.new_empty((n_total,) + old_values.shape[1:])
+
+    # insert values
+    merged_nd[:, old_positions] = old_nd
+    merged_nd[:, new_positions] = new_nd
+    merged_values[old_positions] = old_values
+    merged_values[new_positions] = new_values
+
+    return merged_nd, merged_values
+
+
+# @torch.jit.script
 def scatter_to_sparse_tensor(
     sparse_tensor: Tensor,
     index_tensor: Tensor,
@@ -21,12 +76,13 @@ def scatter_to_sparse_tensor(
     sparse tensor.
 
     Args:
-        sparse_tensor (Tensor): Sparse tensor of dimension ..., M; where ... are
-            S leading sparse dimensions and M is the dense dimension
-        index_tensor (Tensor): Long tensor of dimension ..., S; where ... are
-            leading batch dimensions.
-        values (Tensor): Tensor of dimension ..., M; where ... are leading
-            batch dimensions and M is the dense dimension
+        sparse_tensor (Tensor): Sparse tensor of dimension
+            [s0, s1, s2, ..., d0, d1, d2, ...]; where s0, s1, ... are
+            S leading sparse dimensions and d0, d1, d2, ... are D dense dimensions.
+        index_tensor (Tensor): Long tensor of dimension [b0, b1, b2, ..., S]; where
+            b0, b1, b2, ... are B leading batch dimensions.
+        values (Tensor): Tensor of dimension [b0, b1, b2, ... d0, d1, d2, ...], where
+            dimensions are as above.
         check_all_specified (bool): If True, this function will throw a ValueError
             if any of the indices specified in index_tensor are not already present
             in sparse_tensor. Default: False.
@@ -105,8 +161,15 @@ def scatter_to_sparse_tensor(
         index_tensor = torch.cat(index_tensor.unbind())
         values = torch.cat(values.unbind())
 
-    assert index_tensor.shape[:-1] == values.shape[:-1]
-    assert sparse_tensor.dense_dim() == values.ndim - 1
+    dense_dim = sparse_tensor.dense_dim()
+    sparse_dim = sparse_tensor.sparse_dim()
+    values_batch_dims = values.shape[:-dense_dim] if dense_dim else values.shape
+    if index_tensor.shape[:-1] != values_batch_dims:
+        raise ValueError(
+            "Expected matching batch dims for `index_tensor` and `values`, but got "
+            f"batch dims {index_tensor.shape[:-1]} and "
+            f"{values_batch_dims}, respectively."
+        )
 
     sparse_tensor = sparse_tensor.coalesce()
     sparse_tensor_values = sparse_tensor.values()
@@ -151,10 +214,15 @@ def scatter_to_sparse_tensor(
     new_values = values[~is_specified_mask]
 
     # Get sparse shape info for linearization
-    sparse_dim = sparse_tensor.sparse_dim()
     sparse_sizes = torch.tensor(
         sparse_tensor.shape[:sparse_dim], device=sparse_tensor.device
     )
+
+    if (new_nd_indices >= sparse_sizes.unsqueeze(0)).any():
+        raise ValueError(
+            "`index_tensor` has indices that are out of bounds of the original "
+            f"sparse tensor's sparse shape ({sparse_sizes})."
+        )
 
     # Obtain linearized versions of all indices for sorting
     old_indices_nd = sparse_tensor.indices()
@@ -162,8 +230,8 @@ def scatter_to_sparse_tensor(
     new_indices_lin: Tensor = (new_nd_indices * linear_offsets).sum(-1)
 
     # Find duplicate linear indices
-    unique_new_indices_lin, inverse = new_indices_lin.unique(
-        sorted=True, return_inverse=True
+    unique_new_indices_lin, inverse = torch.unique(
+        new_indices_lin, sorted=True, return_inverse=True
     )
 
     # Use inverse of indices unique to write to new values tensor and tensor of
@@ -198,56 +266,3 @@ def scatter_to_sparse_tensor(
         device=sparse_tensor.device,
         is_coalesced=True,
     )
-
-
-def _merge_sorted(
-    old_nd: Tensor,
-    new_nd: Tensor,
-    old_values: Tensor,
-    new_values: Tensor,
-    insertion_positions: Tensor,
-) -> tuple[Tensor, Tensor]:
-    """Merges two sorted sequences of sparse indices/values and return them in coalesced
-    order.
-
-    All input args must be on the same device.
-
-    Args:
-        old_nd (Tensor): [S x n_old] tensor of N-D indices
-        new_nd (Tensor): [S x n_new] tensor of N-D indices
-        old_values (Tensor): [n_old, ...] tensor of values
-        new_values (Tensor): [n_new, ...] tensor of values
-        insertion_positions (Tensor): [n_new] tensor of insertion positions in
-            old_linear for each element in new_linear
-
-    Returns:
-        merged_nd: [S, n_old+n_new]
-        merged_values: [n_old+n_new, ...]
-    """
-    device = old_nd.device
-    n_old, n_new = old_nd.size(1), new_nd.size(1)
-    n_total = n_old + n_new
-
-    # determine final positions of new values
-    # account for previous insertions to get final positions of new rows
-    new_positions = insertion_positions + torch.arange(
-        n_new, device=device, dtype=insertion_positions.dtype
-    )
-
-    # determine final positions of old values by counting how many new values are
-    # inserted before each old value
-    hist = torch.bincount(insertion_positions, minlength=n_old + 1)
-    old_shift = torch.cumsum(hist[:-1], 0)
-    old_positions = torch.arange(n_old, device=device) + old_shift
-
-    # allocate output tensors
-    merged_nd = old_nd.new_empty(old_nd.size(0), n_total)
-    merged_values = old_values.new_empty((n_total,) + old_values.shape[1:])
-
-    # insert values
-    merged_nd[:, old_positions] = old_nd
-    merged_nd[:, new_positions] = new_nd
-    merged_values[old_positions] = old_values
-    merged_values[new_positions] = new_values
-
-    return merged_nd, merged_values
