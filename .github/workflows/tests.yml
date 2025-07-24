@@ -27,17 +27,27 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libopenblas-dev g++ cmake ninja-build
     
+    - name: Cache MinkowskiEngine
+      id: cache-minkowski
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.pythonLocation }}/lib/python*/site-packages/MinkowskiEngine*
+          ${{ env.pythonLocation }}/lib/python*/site-packages/minkowski*
+        key: ${{ runner.os }}-minkowski-${{ matrix.python-version }}-02fc608-cpu-only
+    
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[tests,spconv]"
     
     - name: Build and install MinkowskiEngine
+      if: steps.cache-minkowski.outputs.cache-hit != 'true'
       run: |
         git clone https://github.com/NVIDIA/MinkowskiEngine.git
-        
         cd MinkowskiEngine
-        python setup.py install --blas=openblas --cpu_only 
+        git checkout 02fc608
+        python setup.py install --blas=openblas --cpu_only
     
     - name: Run tests with TorchScript enabled
       run: |
