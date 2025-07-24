@@ -1,7 +1,6 @@
 import pytest
 import torch
 from torch import Tensor
-from contextlib import ExitStack
 
 from pytorch_sparse_utils.misc import prod, unpack_sparse_tensors, _pytorch_atleast_2_5
 from pytorch_sparse_utils.validation import (
