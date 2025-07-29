@@ -2,17 +2,18 @@ from typing import Any, Sequence, Union
 
 import pytest
 import torch
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 from torch import Tensor
 
-from pytorch_sparse_utils.utils import (
-    batch_topk,
-    BatchTopK,
-    unpack_batch_topk,
-)
 from pytorch_sparse_utils.batching import (
+    batch_offsets_to_seq_lengths,
     seq_lengths_to_batch_offsets,
+)
+from pytorch_sparse_utils.utils import (
+    BatchTopK,
+    batch_topk,
+    unpack_batch_topk,
 )
 
 
@@ -242,6 +243,17 @@ class TestBatchTopK:
             batch_topk(t, off, k=-1)
 
     # Property-based test
+    @example(
+        params={
+            "seq_lens": [3, 3],
+            "extra_dims": [],
+            "dim": 0,
+            "k": [1, 3],
+            "largest": False,
+            "sorted_": False,
+            "seed": 0,
+        },
+    )
     @settings(deadline=None, suppress_health_check=[HealthCheck.differing_executors])
     @given(params=batch_topk_inputs())
     def test_property(self, params, device):
@@ -274,6 +286,14 @@ class TestBatchTopK:
             )
         else:  # tensor
             k_per_batch = params["k"].tolist()
+
+        # Determine if batch_topk will need to actually sort indices even if
+        # sorted = False
+        if not params["sorted_"]:
+            n_seq_lengths = batch_offsets_to_seq_lengths(offsets).unique()
+            if n_seq_lengths.numel() == 1:
+                params["sorted_"] = True
+
 
         ref_idx, ref_off, ref_vals = topk_reference(
             tensor_ref,

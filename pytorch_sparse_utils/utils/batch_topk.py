@@ -81,8 +81,9 @@ def batch_topk(
             each concatenated subsequence. Default: 0 (sequence dimension).
         largest (bool, optional): If True, returns the indices of the largest elements.
             If False, returns those of the smallest elements. Default: True.
-        sorted (bool, optional): If True, returns the elements in sorted order.
-            Default: True.
+        sorted (bool, optional): If True, always returns the elements in sorted order.
+            For technical reasons, the returned elements may be sorted in some cases
+            even when False. Default: True.
         return_values (bool, optional): If True, the output namedtuple will include the
             topk values in addition to the indices and offsets. Default: False.
 
@@ -213,8 +214,8 @@ def batch_topk(
         topk_dim = dim + 1  # account for new leading batch dim
 
         values_all, indices_all = tensor.reshape(batch_shape).topk(
-            k_max_int, topk_dim, largest=largest, sorted=sorted
-        )
+            k_max_int, topk_dim, largest=largest, sorted=True
+        )  # Need to be sorted to be able to select first k for each subseq
 
         # If topk is along sequence length, need to add offsets to indices
         # to globalize them
