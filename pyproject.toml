@@ -13,8 +13,9 @@ dependencies = [
     "sparse",
 ]
 
-[tool.setuptools]
-packages = ["pytorch_sparse_utils"]
+[tool.setuptools.packages]
+find = {}
+include = ["pytorch_sparse_utils", "pytorch_sparse_utils*"]
 
 [project.optional-dependencies]
 tests = [
