@@ -14,7 +14,10 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["pytorch_sparse_utils"]
+include = [
+    "pytorch_sparse_utils",
+    "pytorch_sparse_utils.*",
+]
 
 [project.optional-dependencies]
 tests = [
