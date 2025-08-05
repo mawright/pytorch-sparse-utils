@@ -66,6 +66,10 @@ tensor(indices=tensor([[0, 1, 2, 3],
        size=(5, 5), nnz=4, layout=torch.sparse_coo)
 ```
 
+This repository differs from similar packages like [PyTorch Sparse](https://github.com/rusty1s/pytorch_sparse) in that we build on top of the built-in PyTorch sparse tensor classes.
+This allows compatibility with the supported built-in PyTorch operations as well as maintaining the arbitrary dimensionality features of the built-in sparse tensors, which can be essential for complex-structured data objects like the multi-level feature pyramids used for object detection and other tasks in sparse images.
+It also leaves open the possibility of eventual integration into upstream PyTorch to ensure the broadest availability.
+
 ## Feature Overview
 
 - Autograd-compatible implementations of bulk indexing, sparse tensor shape manipulations, and quick conversions between sparse tensor format and concatenated-batch format for use with position-invariant layers (Linear, BatchNorm, etc.).
